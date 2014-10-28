@@ -1,4 +1,5 @@
 woodcock
 ========
 
-woodcock tracking + path tracing
+This is a global illuminated volume renderer featuring
+woodcock tracking & importance sampled path tracing.
