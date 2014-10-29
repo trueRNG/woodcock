@@ -5,12 +5,12 @@
 #include <fstream>
 #include <algorithm>
 #include <iostream>
-// #include <thrust/device_vector.h>
-// #include <thrust/copy.h>
-// #include <thrust/fill.h>
-// #include <thrust/transform.h>
-// #include <cuda_runtime.h>
-// #include <curand_kernel.h>
+#include <windows.h>
+#include <cmath>
+#include <cassert>
+#include <string>
+
+
 #ifndef texDisplay_h__
 #define texDisplay_h__
 
@@ -21,13 +21,6 @@
 float randf(){ return rand()/float(RAND_MAX+1); }
 #define RANDU randf()
 
-
-
-#include <windows.h>//always include this before glut
-// #include <GL/freeglut.h>
-#include <cmath>
-
-// enum _ColorChannnel{_R, _G, _B};
 
 template <typename T>
 class texBuffer
@@ -351,13 +344,6 @@ void texDisplay::printScreen(const char *filename)
     ofs.close();
 }
 
-CColor bwrR(1,.25,1,.5);//bwr
-CColor bwrG(1,.5,.5,.5);//bwr
-CColor bwrB(1,1,.25,.5);//bwr
-CColor jetR(1.5,.37,.37,.75);//jet
-CColor jetG(1.5,.37,.37,.5 );//jet
-CColor jetB(1.5,.37,.37,.25);//jet
-
 
 
 struct param{
@@ -417,11 +403,10 @@ struct param{
     int show_bg;
 
     char *load_fn;
+
+    float density_max;
 };
 extern param _p;
-#include <cstdio>
-#include <cmath>
-// #include "param.h"
 
 #if 0
 param::param()
@@ -509,8 +494,9 @@ param::param()
 //     envmap = "envmap2.bin";//++++++++++++++++
 //     envmap = "envmap.bin";
 //     envmap = "sun.bin"; g_light_scale = 20; //front 10; //3;//where importance sampled direct lighting matters+++++++++++++++++
-    envmap = "sun2.bin"; g_light_scale = 20; //back 3;//where importance sampled direct lighting matters
-//     envmap = "null"; g_light_scale = 3;//cloud
+//     envmap = "sun2.bin"; g_light_scale = 20; //back 3;//where importance sampled direct lighting matters
+//     envmap = "skydome_00040.bin"; g_light_scale = 2; 
+    envmap = "null"; g_light_scale = 10;//cloud
     env_light_count = 40000; //400; //100; //2000; //fireflies seem to be caused by bad sampled light(s), so increasing the candidate count
                 //kind of solves the problem. But it also could be the problem of sampling some lights excessively
     env_rotate = 0;
@@ -599,7 +585,7 @@ param::param()
     load_fn = "sample_cloud_beta2.bin";
 
     //nonspectral
-    albedo = 0.999;
+    albedo = 0.99;
     spp = 600;//30; // three times(200*3) as for spectral version to achieve similar convergence
     HG_mean_cosine = 0.7; //0.4; //0.9; //0.95; //-0.7; // 0; //
 //     albedo = 0.9999; trace_depth = 300;
@@ -611,25 +597,25 @@ param::param()
 //     global_time = 4;
 //     dist=1;
 //     global_time = 4.5;   //+++++++++++++++++++++
-    fov=20;//24;//zoom in     //+++++++++++++++++++++
+//     fov=20;//24;//zoom in     //+++++++++++++++++++++
     camera_origin[0] = dist*sinf(global_time);
     camera_origin[1] = 0.2;
     camera_origin[2] = dist*cosf(global_time);
     camera_direction[0] = -camera_origin[0];
-//     camera_direction[1] = -camera_origin[1];
+    camera_direction[1] = -camera_origin[1];
 //     camera_direction[1] = 0.2-camera_origin[1];//++++++++++++++++++++
-    camera_direction[1] = -0.2-camera_origin[1];
+//     camera_direction[1] = -0.2-camera_origin[1];
     camera_direction[2] = -camera_origin[2];
     iw = 300;//*2;
     ih = 300;//*2;
-    trace_depth=500; //300;
-    spp=100; //200;//30/3;
+    trace_depth=100; //300;
+    spp=1000; //200;//30/3;
 //     g_density_scale = 200;//equivalent of binarization at isolevel=0.02 with the previous setting
-    env_rotate=  180; //270; //90;//1330; //300;//240;//210;//150;//120; //60;//30; //80; //
+    env_rotate=  270; //180; //90;//1330; //300;//240;//210;//150;//120; //60;//30; //80; //
 //     show_bg=1;
 //     g_density_scale= 50;
-    g_sigma_t = 400;       //++
-    g_density_scale = 100;   //++
+    g_sigma_t = 50;       //++
+    g_density_scale = 1;   //++
 
 }
 #endif
@@ -637,8 +623,6 @@ param::param()
 param _p;
 
 
-// #pragma comment(lib,"cudart.lib")
-// #pragma comment(lib,"curand.lib")
 #ifndef util_h__
 #define util_h__
 
@@ -656,59 +640,43 @@ param _p;
 #define eps 1e-6f
 #define inf 1e10
 
-FI HaD float f_min(float a, float b) { return a<b ? a : b; }
-FI HaD float f_max(float a, float b) { return a>b ? a : b; }
-FI HaD float my_saturate(float x){ return x<0 ? 0 : x>1 ? 1 : x; }
-// FI HaD unsigned char to_char(float x){
-//     return (unsigned char)(my_saturate(0.98*powf(x,1/2.2))*255);
-// }
+float f_min(float a, float b) { return a<b ? a : b; }
+float f_max(float a, float b) { return a>b ? a : b; }
+float my_saturate(float x){ return x<0 ? 0 : x>1 ? 1 : x; }
 
-FI HaD
-    float signed_map(int x, int n){
+float signed_map(int x, int n){
         return 2*(x/(float)n)-1;
 }
-
-FI HaD
-    float sq(float x){ return x*x; }
-
+float sq(float x){ return x*x; }
 
 
 struct vec{
     float x, y, z;
-    FI HaD vec():x(0),y(0),z(0){}
-    FI HaD vec(float a_):x(a_),y(a_),z(a_){}
-    FI HaD vec(float x_, float y_, float z_):
+    vec():x(0),y(0),z(0){}
+    vec(float a_):x(a_),y(a_),z(a_){}
+    vec(float x_, float y_, float z_):
     x(x_),y(y_),z(z_){}
-    FI HaD float& operator[](int n){ return (&x)[n]; }
-    FI HaD const float& operator[](int n) const { return (&x)[n]; }
+    float& operator[](int n){ return (&x)[n]; }
+    const float& operator[](int n) const { return (&x)[n]; }
 };
-FI HaD vec operator+ (const vec& a, const vec& b) { return vec(a.x+b.x, a.y+b.y, a.z+b.z); }
-FI HaD vec operator+ (const vec& a, float b) { return vec(a.x+b, a.y+b, a.z+b); }
-FI HaD vec operator- (const vec& a, const vec& b) { return vec(a.x-b.x, a.y-b.y, a.z-b.z); }
-FI HaD vec operator- (const vec& a) { return vec(-a.x, -a.y, -a.z); }
-FI HaD vec operator* (const vec& a, float b) { return vec(a.x*b, a.y*b, a.z*b); }
-FI HaD vec operator* (float b, const vec& a) { return vec(a.x*b, a.y*b, a.z*b); }
-FI HaD vec normalize(const vec& a) { float len = sqrtf(a.x*a.x+a.y*a.y+a.z*a.z)+eps; return a*(1.0f/len); }
-FI HaD inline float dot(const vec& a, const vec& b) { return a.x*b.x+a.y*b.y+a.z*b.z; }
-FI HaD vec mult (const vec& a, const vec& b) { return vec(a.x*b.x, a.y*b.y, a.z*b.z); }
-FI HaD vec cross(const vec& a, const vec& b) { return vec(a.y*b.z-a.z*b.y,a.z*b.x-a.x*b.z,a.x*b.y-a.y*b.x); }
-FI HaD float dist_sq(const vec& a, const vec& b) { vec d(a-b); return dot(d,d); }
-FI HaD float dist(const vec& a, const vec& b) { return sqrtf(dist_sq(a,b)); }
-FI HaD float length(const vec& a) { return sqrtf(dot(a,a)); }
-FI HaD vec my_saturate(const vec& a) { return vec(my_saturate(a.x),my_saturate(a.y),my_saturate(a.z)); }
+vec operator+ (const vec& a, const vec& b) { return vec(a.x+b.x, a.y+b.y, a.z+b.z); }
+vec operator+ (const vec& a, float b) { return vec(a.x+b, a.y+b, a.z+b); }
+vec operator- (const vec& a, const vec& b) { return vec(a.x-b.x, a.y-b.y, a.z-b.z); }
+vec operator- (const vec& a) { return vec(-a.x, -a.y, -a.z); }
+vec operator* (const vec& a, float b) { return vec(a.x*b, a.y*b, a.z*b); }
+vec operator* (float b, const vec& a) { return vec(a.x*b, a.y*b, a.z*b); }
+vec normalize(const vec& a) { float len = sqrtf(a.x*a.x+a.y*a.y+a.z*a.z)+eps; return a*(1.0f/len); }
+inline float dot(const vec& a, const vec& b) { return a.x*b.x+a.y*b.y+a.z*b.z; }
+vec mult (const vec& a, const vec& b) { return vec(a.x*b.x, a.y*b.y, a.z*b.z); }
+vec cross(const vec& a, const vec& b) { return vec(a.y*b.z-a.z*b.y,a.z*b.x-a.x*b.z,a.x*b.y-a.y*b.x); }
+float dist_sq(const vec& a, const vec& b) { vec d(a-b); return dot(d,d); }
+float dist(const vec& a, const vec& b) { return sqrtf(dist_sq(a,b)); }
+float length(const vec& a) { return sqrtf(dot(a,a)); }
+vec my_saturate(const vec& a) { return vec(my_saturate(a.x),my_saturate(a.y),my_saturate(a.z)); }
 
 #endif // util_h__
 #ifndef ppmLoader_h__
 #define ppmLoader_h__
-
-#include <cstdlib>
-#include <cstdio>
-#include <fstream>
-#include <iostream>
-#include <cassert>
-#include <string>
-// #include <thrust/device_vector.h>
-// #include <cuda_runtime.h>
 
 typedef vec rgb_t;
 
@@ -722,7 +690,6 @@ typedef enum{CLAMP,CYCLIC,NONE} kind_;
 class ppmLoader
 {
 private:
-//     dvec<float> th_d_rawPixels;
     hvec<float> th_h_rawPixels;
 
 public:
@@ -738,8 +705,6 @@ public:
 
     ppmLoader():p_d_rawPixels(NULL),p_h_rawPixels(NULL){}
     ~ppmLoader(){ 
-//         if(rawPixels)delete [] rawPixels;
-//                   if(screenPixels)delete [] screenPixels;
         if(p_d_rawPixels){
             std::cout<<"Freeing envmap"<<std::endl;
             memset((void*)p_d_rawPixels, 0, th_h_rawPixels.size()*sizeof(float));
@@ -755,91 +720,23 @@ public:
         free(pv_device);
         free(Pv_device);
     }
-    int openImageFile( const char *filename, float scale = 1.0f);
     int openImageFile_hdr( const char *filename, float scale = 1.0f, float rotate_degree = 0.0f);
     rgb_t getRGB(float x, float y, kind_ k=NONE);
     rgb_t getRGBdevice(float x, float y, kind_ k=NONE);
     void toDevice();
     void init_pdf();
 
-    void sample_light();
+    void sample_envmap();
     hvec<dir_light> h_light;
     dvec<dir_light> d_light;
-
-#if 0
-    float getFloatR(float x, float y, kind_ k=NONE);
-    float getFloatG(float x, float y, kind_ k=NONE);
-    float getFloatB(float x, float y, kind_ k=NONE);
-#endif    
 };
-
-
-int ppmLoader::openImageFile(
-    const char *filename,
-    float scale)
-{
-    width = 640, height = 480; // default size
-    // Save result to a PPM image (keep these flags if you compile under Windows)       
-    // NOTE::especially std:ios::binary which is equivalent to "wb" in fprintf()
-    std::ifstream ifs(filename, std::ios::in | std::ios::binary);
-    if (ifs.good()) {
-        std::string header;
-        ifs >> header; // P6
-        if(strcmp(header.c_str(), "P6") != 0) {std::cout<<"Wrong format"<<std::endl;return 1; }
-        int maxcol;
-        ifs >> width >> height >> maxcol;
-        std::cout << width << " " << height << " " << maxcol << std::endl;
-    }
-    else {
-        fprintf(stderr, "Can't open file %s\n", filename);
-        ifs.close();
-    }
-
-    unsigned char *screenPixels = new unsigned char[width * height * 3];
-    // 	rawPixels = new float[width * height * 3];
-    th_h_rawPixels.resize(width * height * 3);
-    p_h_rawPixels = RAW(th_h_rawPixels);
-    if(!screenPixels || !p_h_rawPixels) return 1;
-
-    if (ifs.good()) {
-        ifs.ignore();
-        ifs.read((char*)screenPixels, width * height * 3);
-    }
-    else {
-        //checkerboard
-        unsigned char *p = screenPixels;
-        for (unsigned j = 0; j < height; ++j) {
-            for (unsigned i = 0; i < width; ++i) {
-                *p = *(p + 1) = *(p + 2) = ((i & 32) ^ (j & 32)) ? 80 : 150;
-                p += 3;
-            }
-        }
-    }
-
-    for (int i = 0; i < width * height * 3; ++i)
-        p_h_rawPixels[i] = screenPixels[i] / 255.f;
-    ifs.close();	
-    delete [] screenPixels;
-
-    for(int n=0; n<th_h_rawPixels.size(); n++){
-        th_h_rawPixels[n] *= scale;
-    }
-
-    init_pdf();
-    sample_light();
-
-    toDevice();
-    return 0;
-}
 
 int ppmLoader::openImageFile_hdr(
     const char *filename,
     float scale,
     float rotate_degree)
 {
-    width = 640, height = 480; // default size
-    // Save result to a PPM image (keep these flags if you compile under Windows)       
-    // NOTE::especially std:ios::binary which is equivalent to "wb" in fprintf()
+    width = 600, height = 300;
     std::ifstream ifs(filename, std::ios::in | std::ios::binary);
     if (ifs.good()) {
         ifs.read(reinterpret_cast<char*>(&width),sizeof(int));
@@ -858,21 +755,14 @@ int ppmLoader::openImageFile_hdr(
         ifs.read(reinterpret_cast<char*>(p_h_rawPixels),width*height*3*sizeof(float));
     }
     else {
-        //checkerboard
         float *p = p_h_rawPixels;
         for (unsigned j = 0; j < height; ++j) {
             for (unsigned i = 0; i < width; ++i) {
-#if 0
-                *p = *(p + 1) = *(p + 2) = (((i & 32) ^ (j & 32)) ? 80 : 150)/255.0f;
-                p += 3;
-#else
-//                 float hl = expf(-100*(sq((i-width*0.5)/width)+sq((j-height*0.5)/height)))*30+0.3;
-                float hl = expf(-100*(sq((i-width*0.5)/width)+sq((j-height*0.2)/height)))*30+0.3;
+                float hl = expf(-100*(sq((i-width*0.5)/width)+sq((j-height*0.5)/height)))*30+0.3;
                 p[0] =  hl;
                 p[1] =  hl;
                 p[2] =  hl;
                 p += 3;
-#endif
             }
         }
     }
@@ -897,7 +787,7 @@ int ppmLoader::openImageFile_hdr(
     }
 
     init_pdf();
-    sample_light();
+    sample_envmap();
 
     toDevice();
     return 0;
@@ -908,8 +798,6 @@ void ppmLoader::toDevice()
     size_t total = th_h_rawPixels.size()*sizeof(float);
     p_d_rawPixels = (float*)malloc(total);
     memcpy((void*)p_d_rawPixels, (void*)p_h_rawPixels, total);
-    //     th_d_rawPixels = th_h_rawPixels;
-    //     p_d_rawPixels = RAW(th_d_rawPixels);
 
     pu_device= (float*)malloc((height          )*sizeof(float) );
     Pu_device= (float*)malloc((height+1        )*sizeof(float) );
@@ -926,93 +814,6 @@ static inline T clamp(T x, T a, T b)
 {
     return x<a ? a : x>b ? b : x;
 }
-
-#if 0
-float ppmLoader::getFloatR(float x, float y, kind_ k)
-{
-    int x_ = int(x*(width -1)+.5);
-    int y_ = int(y*(height-1)+.5);
-    int offset;
-
-    switch(k){
-    case CLAMP:
-        x_ = clamp(x_, 0, width -1);
-        y_ = clamp(y_, 0, height-1);
-        offset = (x_+y_*width)*3;
-        break;
-    case CYCLIC:
-        //         x_ %= width;
-        //         y_ %= height;
-        x_ = (x_ + width *1000) % width ;
-        y_ = (y_ + height*1000) % height;
-        offset = (x_+y_*width)*3;
-        break;
-    case NONE:
-    default:
-        if(x_<0 || x_>width-1 || y_<0 || y_>height-1)
-            return 0;
-        offset = (x_+y_*width)*3;
-        break;
-    }
-    return rawPixels[offset];
-}
-float ppmLoader::getFloatG(float x, float y, kind_ k)
-{
-    int x_ = int(x*(width -1)+.5);
-    int y_ = int(y*(height-1)+.5);
-    int offset;
-
-    switch(k){
-    case CLAMP:
-        x_ = clamp(x_, 0, width -1);
-        y_ = clamp(y_, 0, height-1);
-        offset = (x_+y_*width)*3;
-        break;
-    case CYCLIC:
-        //         x_ %= width;
-        //         y_ %= height;
-        x_ = (x_ + width *1000) % width ;
-        y_ = (y_ + height*1000) % height;
-        offset = (x_+y_*width)*3;
-        break;
-    case NONE:
-    default:
-        if(x_<0 || x_>width-1 || y_<0 || y_>height-1)
-            return 0;
-        offset = (x_+y_*width)*3;
-        break;
-    }
-    return rawPixels[offset+1];
-}
-float ppmLoader::getFloatB(float x, float y, kind_ k)
-{
-    int x_ = int(x*(width -1)+.5);
-    int y_ = int(y*(height-1)+.5);
-    int offset;
-
-    switch(k){
-    case CLAMP:
-        x_ = clamp(x_, 0, width -1);
-        y_ = clamp(y_, 0, height-1);
-        offset = (x_+y_*width)*3;
-        break;
-    case CYCLIC:
-        //         x_ %= width;
-        //         y_ %= height;
-        x_ = (x_ + width *1000) % width ;
-        y_ = (y_ + height*1000) % height;
-        offset = (x_+y_*width)*3;
-        break;
-    case NONE:
-    default:
-        if(x_<0 || x_>width-1 || y_<0 || y_>height-1)
-            return 0;
-        offset = (x_+y_*width)*3;
-        break;
-    }
-    return rawPixels[offset+2];
-}
-#endif
 
 rgb_t ppmLoader::getRGB( float x, float y, kind_ k )
 {
@@ -1046,7 +847,7 @@ rgb_t ppmLoader::getRGB( float x, float y, kind_ k )
 
 
 /************************************************************************/
-/* Inverse method for importance sampling                               */
+/* Inversion method for importance sampling                               */
 /************************************************************************/
 static void precompute1D(float *f, float *pf, float *Pf, int nf){
     float I = 0.0f;
@@ -1084,19 +885,10 @@ static void sample1D(float *pf, float *Pf, float unif, int nf,
     float &x, float &p)
 {
     int i=0;
-#if 1
     for(; i<nf; i++){
         if(Pf[i]<=unif && unif<Pf[i+1] || i==nf-1)//avoid overflow by additional check
             break;
     }
-#else
-    for(; i<nf; i++){
-        if(Pf[i]<=unif && unif<Pf[i+1])
-            break;
-    }
-    if(i>=nf-1) i=nf-1;//avoid overflow by backtracking
-#endif
-    //     printf("<<<<<<<<<<<%f,%f>>>>>>>>>>\n",Pf[nf-1],Pf[nf]);
     float t = Pf[i+1] > Pf[i] ? 
         (Pf[i+1] - unif) / (Pf[i+1] - Pf[i])
         : 0;
@@ -1115,13 +907,6 @@ static void sample2D(float *pu, float *Pu, float *pv, float *Pv,
     pdf = pdfu * pdfv;
 }
 
-// float compute_luminance(float r, float g, float b){
-//     return
-//               p_h_rawPixels[offset  ] * 0.2126
-//             + p_h_rawPixels[offset+1] * 0.7152
-//             + p_h_rawPixels[offset+2] * 0.0722;
-// }
-
 void ppmLoader::init_pdf(){
     hvec<float> luminance(width*height);
     float luminance_sum = 0;
@@ -1131,8 +916,6 @@ void ppmLoader::init_pdf(){
               p_h_rawPixels[offset  ] * 0.2126
             + p_h_rawPixels[offset+1] * 0.7152
             + p_h_rawPixels[offset+2] * 0.0722;
-//             compute_luminance(p_h_rawPixels[offset  ],
-//             p_h_rawPixels[offset+1],p_h_rawPixels[offset+2]);
         luminance_sum += luminance[n];
     }
 
@@ -1152,17 +935,8 @@ void ppmLoader::init_pdf(){
         float test_u, test_v, test_pdf;
         sample2D(pu_host, Pu_host, pv_host, Pv_host, randf(), randf(), height, width,
             test_u, test_v, test_pdf);
-        //         printf("[%f,%f]_[%f]_[%f]\n",test_u,test_v,test_pdf,luminance[int(test_u)*width+int(test_v)]);
-        //         printf("[%f,%f]_[%f]_[%f]\n",test_u,test_v,test_pdf,0);
-        //         while(luminance[int(test_u)*width+int(test_v)]>160){}//printf("%d,",n);
         z0 += test_pdf;
         integral += (luminance[int(test_u)*width+int(test_v)] / luminance_sum) / test_pdf;
-
-        //debug
-        //         if( luminance[int(test_u)*width+int(test_v)] / test_pdf>40000*2)
-        //             printf("estimator= %f at<%d, %d> pdf=%f, value=%f\n", 
-        //             luminance[int(test_u)*width+int(test_v)] / test_pdf,  int(test_u), int(test_v), test_pdf,
-        //             luminance[int(test_u)*width+int(test_v)]);
 
     }
     integral /= test_count;//integrand is luminance[i]/luminance_sum, should integrate to 1
@@ -1171,16 +945,8 @@ void ppmLoader::init_pdf(){
     printf("int=%f\n",integral);
 }
 
-
-void ppmLoader::sample_light(
-
-    //     Vector3& sample_dir, float& sample_pdf, 
-    //     float *pu, float *Pu, float *pv, float *Pv, float e1, float e2,
-    //     int width, int height
-    )
+void ppmLoader::sample_envmap()
 {
-    //     int N = 10;
-//     int N = 20;
     int N = int(sqrtf(_p.env_light_count));
     int n_light = N*N;
     hvec<float> e1, e2;
@@ -1208,10 +974,6 @@ void ppmLoader::sample_light(
         float phi = (int(test_v)+0.5)/float(width) * (2.0f * M_PI);//azimuthal
         vec sample_dir = vec(sinf(theta)*sinf(phi),cosf(theta),sinf(theta)*-cosf(phi));//in world coordinates, care with calibration with envmap sampling routine, trick is to offset and/or invert phi
 
-        //            float sample_pdf = test_pdf * ((float(width)*float(height))/(4.0f*M_PI));
-        //         float sample_pdf = test_pdf * ((float(width)*float(height))/(2.0f*M_PI*M_PI));
-        //         float sample_pdf = test_pdf * ((float(width)*float(height))/(2.0f*M_PI*M_PI));
-        // float sample_pdf = test_pdf * (float(width)*float(height)) *0.02;
         float sample_pdf = test_pdf * ((float(width)*float(height))/(2.0f*M_PI*M_PI*sinf(theta)));//for normalization over sphere
                                                                           //closer to the pole -> larger pdf
         dir_light dl;
@@ -1219,22 +981,7 @@ void ppmLoader::sample_light(
         dl.radiance = sample_radiance;
         dl.pdf = sample_pdf;
 
-/*
-        float _lum = 
-            dl.radiance.x* 0.2126+
-            dl.radiance.y* 0.7152+
-            dl.radiance.z* 0.0722;
-        if(_lum/dl.pdf<0.5)    //empirically reduced singular samples close to poles, <causes bias>
-                        //a better solution is to use equal angles to
-                        //sample the envmap for tabulation
-                        printf("discard: lum(%e)/pdf(%e)=%e@%f\n",
-                        _lum,
-                        dl.pdf,
-                        _lum/dl.pdf,
-                        dl.direction.y);
-        else
-*/
-            h_light.push_back(dl);
+        h_light.push_back(dl);
     }
 
     d_light = h_light;
@@ -1242,14 +989,7 @@ void ppmLoader::sample_light(
     printf(".#light=..%d...\n",d_light.size());
 }
 
-
-
-
-
-/// GPU routines
-
-FI Dev 
-    void sample1D_CUDA(float *pf, float *Pf, float unif, int nf,
+void sample1D_CUDA(float *pf, float *Pf, float unif, int nf,
     float &x, float &p)
 {
     int i=0;
@@ -1265,8 +1005,7 @@ FI Dev
     p = pf[i];
 }
 
-FI Dev 
-    void sample2D_CUDA(float *pu, float *Pu, float *pv, float *Pv,
+void sample2D_CUDA(float *pu, float *Pu, float *pv, float *Pv,
     float unif1, float unif2, int nu, int nv, 
     float &u, float &v, float &pdf)
 {
@@ -1276,16 +1015,7 @@ FI Dev
     pdf = pdfu * pdfv;
 }
 
-// for(int n=0; n<test_count; n++){
-//     float test_u, test_v, test_pdf;
-//     sample2D(pu_host, Pu_host, pv_host, Pv_host, randf(), randf(), height, width,
-//         test_u, test_v, test_pdf);
-//     z0 += test_pdf;
-//     integral += (luminance[int(test_u)*width+int(test_v)] / luminance_sum) / test_pdf;
-// }
-
-FI Dev 
-    int sample_envmap_inverse_method(vec& sample_dir, float& sample_pdf, 
+int sample_envmap_inverse_method(vec& sample_dir, float& sample_pdf, 
     float *pu, float *Pu, float *pv, float *Pv, float e1, float e2,
     int width, int height)
 {
@@ -1293,27 +1023,16 @@ FI Dev
     sample2D_CUDA(pu, Pu, pv, Pv, e1, e2, height, width, 
         test_u, test_v, test_pdf);
 
-//     sample_pdf = test_pdf * ((float(width)*float(height))/(4.0f*M_PI));//solid angle form //wrong and to be fixed
-    //     sample_pdf = test_pdf * ((float(width)*float(height))/(2.0f*M_PI*M_PI));//area form
-
     float theta = int(test_u)/float(height) * M_PI;
     float phi = int(test_v)/float(width) * (2.0f * M_PI);//azimuthal
 
-    sample_pdf = test_pdf * ((float(width)*float(height))/(2.0f*M_PI*M_PI*sinf(theta)));//for normalization over sphere
-
-    // sample_dir = vec(sinf(theta)*sinf(phi),cosf(theta),sinf(theta)*cosf(phi));//in world coordinates, care with calibration with envmap sampling routine, trick is to offset and/or invert phi
-    sample_dir = vec(sinf(theta)*sinf(phi),cosf(theta),sinf(theta)*-cosf(phi));//in world coordinates, care with calibration with envmap sampling routine, trick is to offset and/or invert phi
+    sample_pdf = test_pdf * ((float(width)*float(height))/(2.0f*M_PI*M_PI*sinf(theta)));
+    sample_dir = vec(sinf(theta)*sinf(phi),cosf(theta),sinf(theta)*-cosf(phi));
 
     return int(test_u)*width+int(test_v);
 }
 
 
-
-
-
-/************************************************************************/
-/*                                                                      */
-/************************************************************************/
 
 ppmLoader ppm;
 #endif // ppmLoader_h__
@@ -1321,63 +1040,7 @@ ppmLoader ppm;
 #undef min
 #undef max
 #define DEFAULT_DIM 256
-// #define DEFAULT_DIM 64
-// const float eps = 1e-4f;
 
-/************************************************************************/
-/*                                                                      */
-/************************************************************************/
-
-// struct th_rng{
-//     th_rng(int w_, int h_);
-//     curandStateXORWOW_t *getHandle();
-// };
-// thrust::device_vector<curandStateXORWOW_t> g_th_d_states;//used for PRNG
-// namespace XORShift { // XOR shift PRNG
-//     unsigned int x = 123456789;
-//     unsigned int y = 362436069;
-//     unsigned int z = 521288629;
-//     unsigned int w = 88675123; 
-//     inline unsigned int frand() { 
-//         unsigned int t;
-//         t = x ^ (x << 11);
-//         x = y; y = z; z = w;
-//         return (w = (w ^ (w >> 19)) ^ (t ^ (t >> 8))); 
-//     }
-// }
-// __global__ void initCurandStates(unsigned int *d_seeds, curandStateXORWOW_t *d_states, int width, int height) {
-//     int ix = threadIdx.x + blockIdx.x * blockDim.x;
-//     int iy = threadIdx.y + blockIdx.y * blockDim.y;
-//     if (ix >= width || iy >= height)
-//         return;
-//     int idx = ix + iy * width;
-//     curand_init(d_seeds[idx], idx*0, 0, &d_states[idx]);
-// }
-// th_rng::th_rng(int w, int h){
-//     printf("th_rng:: initializing to <%d,%d>\n", w, h);
-// 
-//     thrust::host_vector<unsigned int> th_seeds(w*h);//no reseed
-//     thrust::generate(th_seeds.begin(), th_seeds.end(), XORShift::frand);
-//     thrust::device_vector<unsigned int> th_d_seeds = th_seeds;
-// 
-//     g_th_d_states.resize(w*h);
-// #define NB_THREADS_X 8
-// #define NB_THREADS_Y 8
-//     int nbbx = (_p.iw +NB_THREADS_X -1)/ NB_THREADS_X;
-//     int nbby = (_p.ih +NB_THREADS_Y -1)/ NB_THREADS_Y;
-//     dim3 nbBlocks(nbbx,nbby);
-//     dim3 threadsPerBlock(NB_THREADS_X, NB_THREADS_Y);
-// #define LAUNCH_SPEC nbBlocks, threadsPerBlock
-//     initCurandStates<<<LAUNCH_SPEC>>>(RAW(th_d_seeds), RAW(g_th_d_states), w, h);
-// }
-// curandStateXORWOW_t * th_rng::getHandle(){
-//     return RAW(g_th_d_states);
-// }
-// th_rng *g_rng;
-
-/************************************************************************/
-/*                                                                      */
-/************************************************************************/
 static void save_hdr_image(const float *fb, int width, int height, const char *filename)
 {
     std::ofstream ofstream_bin;
@@ -1387,182 +1050,60 @@ static void save_hdr_image(const float *fb, int width, int height, const char *f
         return;
     }
 
-    try {
-        ofstream_bin.write(reinterpret_cast<const char*>(&width), sizeof(int));
-        ofstream_bin.write(reinterpret_cast<const char*>(&height), sizeof(int));
-        ofstream_bin.write(reinterpret_cast<const char*>(fb),width*height*3*sizeof(float));
-        ofstream_bin.close();
+    ofstream_bin.write(reinterpret_cast<const char*>(&width), sizeof(int));
+    ofstream_bin.write(reinterpret_cast<const char*>(&height), sizeof(int));
+    ofstream_bin.write(reinterpret_cast<const char*>(fb),width*height*3*sizeof(float));
+    ofstream_bin.close();
 
-        printf("hdr::=======%f, %f=======\n",
-            *std::min_element(fb,fb+width*height*3),
-            *std::max_element(fb,fb+width*height*3)); 
+    printf("hdr::=======%f, %f=======\n",
+        *std::min_element(fb,fb+width*height*3),
+        *std::max_element(fb,fb+width*height*3)); 
 
-        //ppm examination
-        std::ifstream ifstream_bin;
-        ifstream_bin.open(filename, std::ios::in | std::ios::binary);
-        if (!ifstream_bin.is_open()) {
-            return;
-        }
+    //ppm examination
+    std::ifstream ifstream_bin;
+    ifstream_bin.open(filename, std::ios::in | std::ios::binary);
+    if (!ifstream_bin.is_open()) {
+        return;
+    }
 
-        struct ppm_writer
-        {
-            ppm_writer(){}
-            float clamp(float x){ return x<0 ? 0 : x>1 ? 1 : x; }
-            void operator()(float *fb, int width, int height, const char *fn){
-                std::ofstream ofs(fn, std::ios::out | std::ios::binary);
-                ofs << "P6\n" << width << " " << height << "\n255\n";
-                unsigned char *bufByte = new unsigned char[width * height * 3];
-                for (unsigned n = 0; n < width * height *3; ++n) {
-                    bufByte[n] = (unsigned char)(clamp(fb[n])*255);
-                }
-                ofs.write(reinterpret_cast<char*>(bufByte), width * height *3);
-                ofs.close();
-                delete [] bufByte;
+    struct ppm_writer
+    {
+        ppm_writer(){}
+        float clamp(float x){ return x<0 ? 0 : x>1 ? 1 : x; }
+        void operator()(float *fb, int width, int height, const char *fn){
+            std::ofstream ofs(fn, std::ios::out | std::ios::binary);
+            ofs << "P6\n" << width << " " << height << "\n255\n";
+            unsigned char *bufByte = new unsigned char[width * height * 3];
+            for (unsigned n = 0; n < width * height *3; ++n) {
+                bufByte[n] = (unsigned char)(clamp(fb[n])*255);
             }
-        }save_ppm;
-
-        ifstream_bin.read(reinterpret_cast<char*>(&width),sizeof(int));
-        ifstream_bin.read(reinterpret_cast<char*>(&height),sizeof(int));
-
-        std::vector<float> buf(width*height*3);
-
-        ifstream_bin.read(reinterpret_cast<char*>(&buf[0]),width*height*3*sizeof(float));
-        ifstream_bin.close();
-
-        float mmax = *std::max_element(buf.begin(),buf.end());
-        for(int n=0; n<width*height*3; n++){
-            buf[n] /= mmax;
+            ofs.write(reinterpret_cast<char*>(bufByte), width * height *3);
+            ofs.close();
+            delete [] bufByte;
         }
-        save_ppm(&buf[0],width,height,"_additional.ppm");
+    }save_ppm;
 
-    }
+    ifstream_bin.read(reinterpret_cast<char*>(&width),sizeof(int));
+    ifstream_bin.read(reinterpret_cast<char*>(&height),sizeof(int));
 
-    catch (const std::exception& exception) {
-        std::cerr << exception.what() << std::endl;
+    std::vector<float> buf(width*height*3);
+
+    ifstream_bin.read(reinterpret_cast<char*>(&buf[0]),width*height*3*sizeof(float));
+    ifstream_bin.close();
+
+    float mmax = *std::max_element(buf.begin(),buf.end());
+    for(int n=0; n<width*height*3; n++){
+        buf[n] /= mmax;
     }
+    save_ppm(&buf[0],width,height,"_additional.ppm");
 }
-
-
-/************************************************************************/
-/*                                                                      */
-/************************************************************************/
-
-// CColor new_jetR(1.5,.37,.37,.65);//jet
-// CColor new_jetG(1.5,.37,.37,.5 );//jet
-// CColor new_jetB(1.5,.37,.37,.35);//jet
-CColor new_jetR(1.5,.37,.37,.75);//jet
-CColor new_jetG(1.5,.37,.37,.5 );//jet
-CColor new_jetB(1.5,.37,.37,.25);//jet
-
-struct colormap_proxy{
-    int color_levels;
-    vec *transferfunc;
-    float *transferfuncw;
-    FI HaD vec map(float x) const {
-        float x_ = my_saturate(x);
-        //linear
-        x_ *= (color_levels-1);
-        int i_0 = (int)x_;
-        int i_1 = i_0 + 1;
-        float u1 = x_ - i_0;
-        float u0 = 1 - u1;
-        return transferfunc[i_0]*u0+transferfunc[i_1]*u1;
-    }
-    FI HaD float map_opacity(float x) const {
-        float x_ = my_saturate(x);
-        //linear
-        x_ *= (color_levels-1);
-        int i_0 = (int)x_;
-        int i_1 = i_0 + 1;
-        float u1 = x_ - i_0;
-        float u0 = 1 - u1;
-        return transferfuncw[i_0]*u0+transferfuncw[i_1]*u1;
-    }
-};
-
-struct colormap{
-    int color_levels;
-    hvec<vec> transferfunc;
-    hvec<float> transferfuncw;
-    dvec<vec> dtransferfunc;
-    dvec<float> dtransferfuncw;
-    colormap():color_levels(8){
-        transferfunc.resize(color_levels);
-        transferfuncw.resize(color_levels);
-
-#if 0
-        transferfunc[0] = vec(0.0,0.0,0.0);
-        for(int n=1; n<color_levels; n++){
-//             transferfunc[n] = vec(  new_jetR((float)(n-1)/(color_levels-1)),       //original
-//                                     new_jetG((float)(n-1)/(color_levels-1)),       //original
-//                                     new_jetB((float)(n-1)/(color_levels-1)));      //original
-            transferfunc[n] = vec(  new_jetR((float)(n-1)/(color_levels-2)),
-                                    new_jetG((float)(n-1)/(color_levels-2)),
-                                    new_jetB((float)(n-1)/(color_levels-2)));
-        }
-#else
-        for(int n=0; n<color_levels; n++){
-//             transferfunc[n] = vec(  new_jetR((float)(n)/(color_levels-1)),
-//                                     new_jetG((float)(n)/(color_levels-1)),
-//                                     new_jetB((float)(n)/(color_levels-1)));
-            transferfunc[n] = vec(  bwrR((float)(n)/(color_levels-1)),
-                                    bwrG((float)(n)/(color_levels-1)),
-                                    bwrB((float)(n)/(color_levels-1)));
-        }
-#endif
-        transferfuncw[0] = 0.0f; //0;
-        for(int n=1; n<color_levels; n++){
-//             transferfuncw[n] = 1;
-            transferfuncw[n] = n / float(color_levels-1);
-        }
-
-        printf("colormap::size=<%d><%d>\n",transferfunc.size(),transferfuncw.size());
-        printf("r   g   b   a \n");
-        for(int n=0; n<color_levels; n++)
-        printf("%f %f, %f, %f\n", transferfunc[n].x, transferfunc[n].y, transferfunc[n].z, transferfuncw[n]);
-    }
-    vec map(float x) const {
-        float x_ = my_saturate(x);
-        //linear
-        x_ *= (color_levels-1);
-        int i_0 = (int)x_;
-        int i_1 = i_0 + 1;
-        float u1 = x_ - i_0;
-        float u0 = 1 - u1;
-        return transferfunc[i_0]*u0+transferfunc[i_1]*u1;
-    }
-    float map_opacity(float x) const {
-        float x_ = my_saturate(x);
-        //linear
-        x_ *= (color_levels-1);
-        int i_0 = (int)x_;
-        int i_1 = i_0 + 1;
-        float u1 = x_ - i_0;
-        float u0 = 1 - u1;
-        return transferfuncw[i_0]*u0+transferfuncw[i_1]*u1;
-    }
-    //////////////////////////////////////////////////////////////////////////
-    void toDevice(){
-        dtransferfunc = transferfunc;
-        dtransferfuncw = transferfuncw;//the copy of array of non-trivial type must not be in the constructor of a global object, no reason
-    }
-    colormap_proxy get_proxy(){
-        colormap_proxy _proxy;
-        _proxy.color_levels = color_levels;
-        _proxy.transferfunc = RAW(dtransferfunc);
-        _proxy.transferfuncw = RAW(dtransferfuncw);
-
-        return _proxy;
-    }
-};
-colormap _c;
 
 struct ray{
     vec o, d;
     vec invdir;
     int sign[3];
-    FI HaD ray(){}
-    FI HaD ray(const vec& o_, const vec& d_):o(o_),d(normalize(d_)){
+    ray(){}
+    ray(const vec& o_, const vec& d_):o(o_),d(normalize(d_)){
         invdir.x = 1.0f / d.x;
         invdir.y = 1.0f / d.y;
         invdir.z = 1.0f / d.z;
@@ -1570,7 +1111,7 @@ struct ray{
         sign[1] = (invdir.y < 0);
         sign[2] = (invdir.z < 0);
     }
-    FI HaD vec advance(float t) const { return o + d * t; }
+    vec advance(float t) const { return o + d * t; }
 };
 struct shade_rec{
     float t_near;
@@ -1578,41 +1119,12 @@ struct shade_rec{
     vec color;
 };
 
-//////////////////////////////////////////////////////////////////////////
-FI HaD
-float implicit_sphere(int i, int j, int k, int N){
-    return sqrtf(
-        sq(signed_map(i,N)) + 
-        sq(signed_map(j,N)) + 
-        sq(signed_map(k,N))  ) - 1.0f; 
-}
-
-FI HaD
-float implicit_1(int i, int j, int k, int N){
-    float x = signed_map(i,N) * 5;
-    float y = signed_map(j,N) * 5;
-    float z = signed_map(k,N) * 5;
-    return sq(x-2)*sq(x+2)+sq(y-2)*sq(y+2)+sq(z-2)*sq(z+2)+3*(sq(x)*sq(y)+sq(x)*sq(z)+sq(y)*sq(z))+6*x*y*z-10*(sq(x)+sq(y)+sq(z))+22;
-}
-
-FI HaD
-float implicit_2(int i, int j, int k, int N){
-    float x = signed_map(i,N) * 1.5;
-    float y = signed_map(j,N) * 1.5;
-    float z = signed_map(k,N) * 1.5;
-    return
-        sq(2.92*(x-1)*sq(x)*(x+1)+1.7*sq(y))*sq(sq(y)-0.88)+
-        sq(2.92*(y-1)*sq(y)*(y+1)+1.7*sq(z))*sq(sq(z)-0.88)+
-        sq(2.92*(z-1)*sq(z)*(z+1)+1.7*sq(x))*sq(sq(x)-0.88)-0.02 -0.03;
-}
-
-
-FI HaD int index_xyz(int x, int y, int z, int N, int NN) { return x+y*N+z*NN; }
-FI HaD int index_xzy(int x, int y, int z, int N, int NN) { return x+z*N+y*NN; }
-FI HaD int index_yxz(int x, int y, int z, int N, int NN) { return y+x*N+z*NN; }
-FI HaD int index_yzx(int x, int y, int z, int N, int NN) { return y+z*N+x*NN; }
-FI HaD int index_zxy(int x, int y, int z, int N, int NN) { return z+x*N+y*NN; }
-FI HaD int index_zyx(int x, int y, int z, int N, int NN) { return z+y*N+x*NN; }
+int index_xyz(int x, int y, int z, int N, int NN) { return x+y*N+z*NN; }
+int index_xzy(int x, int y, int z, int N, int NN) { return x+z*N+y*NN; }
+int index_yxz(int x, int y, int z, int N, int NN) { return y+x*N+z*NN; }
+int index_yzx(int x, int y, int z, int N, int NN) { return y+z*N+x*NN; }
+int index_zxy(int x, int y, int z, int N, int NN) { return z+x*N+y*NN; }
+int index_zyx(int x, int y, int z, int N, int NN) { return z+y*N+x*NN; }
 #define index_convention index_xyz
 
 template<typename T>
@@ -1622,9 +1134,9 @@ struct _tex3d_proxy{//isocube
     float l;
     T *data;
     //////////////////////////////////////////////////////////////////////////
-    FI Dev T& operator[] (int n) { return data[n]; }
-    FI Dev T& operator() (int i, int j, int k) { return data[index(i,j,k)]; }
-    Dev T fetch_gpu(const vec& pos) const {
+    T& operator[] (int n) { return data[n]; }
+    T& operator() (int i, int j, int k) { return data[index(i,j,k)]; }
+    T fetch_gpu(const vec& pos) const {
         if(outside(pos))return 0;
         vec p = remap_to_one(pos);
         float x_ = p.x;
@@ -1657,14 +1169,14 @@ struct _tex3d_proxy{//isocube
             ;
     }
     //////////////////////////////////////////////////////////////////////////
-    FI HaD bool outside(const vec& pos) const {
+    bool outside(const vec& pos) const {
         return pos.x<min.x || pos.y<min.y || pos.z<min.z
             || pos.x>max.x || pos.y>max.y || pos.z>max.z;
     }
-    FI HaD vec remap_to_one(const vec& pos) const {//normalize
+    vec remap_to_one(const vec& pos) const {//normalize
         return (pos-min)*(1.0f/l);
     }
-    FI HaD int index(int x, int y, int z) const {
+    int index(int x, int y, int z) const {
         return index_convention(x, y, z, N, NN);
     }
 };
@@ -1677,11 +1189,11 @@ struct _tex3d{//isocube
     hvec<T> data;
     dvec<T> data_gpu;
     struct abs_compare{
-        FI HaD abs_compare(){}
-        FI HaD bool operator()(float a, float b){
+        abs_compare(){}
+        bool operator()(float a, float b){
             return a<b;
         }
-        FI HaD bool operator()(vec a, vec b){
+        bool operator()(vec a, vec b){
             return length(a)<length(b);
         }
     };
@@ -1807,37 +1319,14 @@ struct _tex3d{//isocube
         printf("loaded %s <%d,%d,%d>\n",fn,N,N,N);
     }
     void load_field(const char *fn);
-    void init_implicit(int choose){
-        switch(choose)
-        {
-        default:
-        case 0:
-            for(int i=0; i<N; i++){
-                for(int j=0; j<N; j++){
-                    for(int k=0; k<N; k++){
-                        data[index(i,j,k)] = 
-                            powf(my_saturate((-implicit_sphere(i,j,k,N))+0.99),50);//sampler(i,j,k,N)  >0?0.1*0:0.5;
-                    }
+    void init_simple(){
+        for(int i=0; i<N; i++){
+            for(int j=0; j<N; j++){
+                for(int k=0; k<N; k++){
+                    data[index(i,j,k)] = 
+                        (int(ceil(5.0*(i+1)/N)+ceil(5.0*(j+1)/N)+ceil(5.0*(k+1)/N))&1)*1;
                 }
-            }break;
-        case 1:
-            for(int i=0; i<N; i++){
-                for(int j=0; j<N; j++){
-                    for(int k=0; k<N; k++){
-                        data[index(i,j,k)] = 
-                            powf(my_saturate((-implicit_1(i,j,k,N))+0.99),50);//sampler(i,j,k,N)  >0?0.1*0:0.5;
-                    }
-                }
-            }break;
-        case 2:
-            for(int i=0; i<N; i++){
-                for(int j=0; j<N; j++){
-                    for(int k=0; k<N; k++){
-                        data[index(i,j,k)] = 
-                            powf(my_saturate((-implicit_2(i,j,k,N))+0.99),50);//sampler(i,j,k,N)  >0?0.1*0:0.5;
-                    }
-                }
-            }break;
+            }
         }
     }
     void normalize(){
@@ -1941,8 +1430,6 @@ struct KernelArray
     FI HaD T& operator[](int n) { return _array[n]; }
 };
 
-//////////////////////////////////////////////////////////////////////////
-FI HaD
 bool intersect_vol(const ray& r, const vec& aabb_min, const vec& aabb_max, float& t_near, float& t_far){
     vec bounds[2] = {aabb_min,aabb_max};
     float tmin, tmax, tymin, tymax, tzmin, tzmax;
@@ -1966,211 +1453,27 @@ bool intersect_vol(const ray& r, const vec& aabb_min, const vec& aabb_max, float
         tmax = tzmax;
     if (tmin > 0) t_near = tmin; else t_near = 0;
     if (tmax < inf) t_far = tmax;
-    if(tmax>inf/2){
-//         printf("<<<%f,%f,%f>>> ",r.d.x,r.d.y,r.d.z);
+    if(tmax>=inf){
         return false;
     }
     return true;
 }
 
-// opacity + transparency = 1
-// emission = density * exp(-sigma_t*l) * light
-// radiance = opacity * transparency^d * emission
-// in texture blending larger front opacity means less contribution by back emission, which is physically explained by radiance attenuation in scattering media
-// #define STEP 0.001  //++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-// #define STEP 0.01 
 
-FI HaD
-float phong_shading(const vec& normal, const vec& light_dir,   // into shade point
-                                     const vec& view_dir,     // into shade point
-                                        float kd, float ks, float ka, float shininess)
-{
-    float cosine_factor = f_max(eps, -dot(normal, light_dir));
-//     vec reflect_dir = (normal * (cosine_factor * 2) + light_dir) * -1;// into shade point
-    vec half_dir = normalize((light_dir+view_dir)*-1);//out of shade point
-//     float phong_factor = f_max(eps, cosine_factor * powf(dot(reflect_dir, view_dir), 20.0f));//permits invalid result when -*- -> +
-//     float phong_factor = f_max(eps, cosine_factor * powf(f_max(eps, dot(reflect_dir, view_dir)), 20.0f));
-//     float kd = 1.0f, ks = 10.0f, ka = 0.008;
-//     float phong_factor = f_max(eps, cosine_factor * powf(f_max(eps, dot(reflect_dir, view_dir)), 100.0f));//false highlight
-//     float phong_factor = cosine_factor * f_max(eps, powf(f_max(eps, dot(reflect_dir, view_dir)), 100.0f));//correct highlight
-//     float phong_factor = cosine_factor * f_max(eps, powf(f_max(eps, dot(reflect_dir, view_dir)), 20.0f));//correct highlight
-//     float phong_factor = f_max(0, powf(f_max(0, dot(reflect_dir, view_dir)), 200.0f));//?? highlight
-//     float phong_factor = cosine_factor * f_max(0, powf(dot(reflect_dir, view_dir), 3.0f));//?? highlight
-//     float phong_factor = cosine_factor * powf(f_max(0, dot(reflect_dir, view_dir)), 3.0f);//?? highlight
-//     float phong_factor = powf(f_max(0, dot(normal, half_dir)), 50);//?? highlight
-    float phong_factor = powf(f_max(0, dot(normal, half_dir)), shininess);//?? highlight
-//     float kd = 0.8f, ks = 10.0f, ka = 0.01f;
-//     float kd = 0.8f, ks = 50000.0f, ka = 0.01f;
-//     float kd = 0.5f, ks = 50000.0f, ka = 0.001f;
-//     float kd = 0.0f, ks = 10.0f, ka = 0.000f;//test highlight
-//     float kd = 0.8f, ks = 10.0f, ka = 0.0005f;
-
-    //sigma
-//     float kd = 0.7f, ks = 1000.0f, ka = 0.300f;//test highlight
-//     float kd = 2, ks = 1000, ka = 0.03;//test highlight*******
-
-    return (ka + kd * cosine_factor + ks * phong_factor);//same value for all channels
-//     return vec(ka, kd * cosine_factor, ks * phong_factor);
-}
-
-/************************************************************************/
-/*                                                                      */
-/************************************************************************/
-
-// const float inv_log2 = 1.0f/logf(2.0f);
-#define INV_LOG2 0.69314718055994530941723212145818
-FI HaD float ramp(float x)
-{
-//     return logf(my_saturate(x)+1) * INV_LOG2;
-    return my_saturate(x);
-}
-
-FI HaD
-float transfer_function(float density, float gradient,
-    float transfer_offset, float transfer_scale, float gradient_weight
-    )
-{
-    //     return (density-g_transfer_offset)*g_transfer_scale * gradient_weight * gradient;
-    return (density-transfer_offset)*transfer_scale;
-}
-FI HaD
-float transfer_function_w(float density, float gradient,
-    float transfer_offset, float transfer_scale, float gradient_weight
-    )
-{
-    //     return (density-g_transfer_offset)*g_transfer_scale * gradient_weight * gradient;
-    return ((density-transfer_offset) > 0 ) * gradient;
-}
-
-__device__ float get_transmittance(const vec& a, const vec& b, const tex3d_proxy& pdensity_volume, const param& _p, int channel);
-FI Dev float transfer_function(float x, float scale);
-
-__device__
-    float get_transmittance_debug(const vec& a, const vec& b, const tex3d_proxy& pdensity_volume, const param& _p)
-{
-    float delta = 0.02; //_p.STEP;
-
-    float optical_thickness = 0.0f;
-    ray light_ray(a,normalize(b-a));
-
-    float t_near, t_far;
-    bool shade_vol = intersect_vol(light_ray, pdensity_volume.min, pdensity_volume.max, t_near, t_far);
-    if(shade_vol)
-    {
-        vec dir = light_ray.d;
-        vec step = dir * delta;
-        float max_t = dist(a,b);
-
-        max_t = f_min(t_far, max_t);
-        float t1 = t_near;
-        vec pos = light_ray.advance(t_near);
-        float delta_transmittance_constant = _p.g_sigma_t*delta;
-        do{
-            float density = pdensity_volume.fetch_gpu(pos);
-//             density = transfer_function(density, _p.g_density_scale);
-            optical_thickness += (density*delta_transmittance_constant);
-            pos = pos + step;
-            t1 += delta;
-        }while(t1 <= max_t);
-    }
-
-    float transmittance = expf(-optical_thickness);
-    return transmittance;
-}
-
-
-FI Dev float bg_debug(vec dir){
-//     return (dir.y+1);
-    return (int(ceil(dir.y*20)+ceil(dir.x*20))&1)*0.5+0.5;
-}
-
-Dev FI float sampleSegment(float epsilon, float sigma) {
-    return -logf(1.0f - epsilon) / sigma;
-}
-Dev FI vec sampleSphere(float e1, float e2) {
-    float cost = 1.0f - 2.0f * e1/* full sphere */, sint = sqrtf(1.0f - cost * cost);
-    return vec(cosf(2.0f * M_PI * e2) * sint, sinf(2.0f * M_PI * e2) * sint, cost);
-}
-Dev FI vec sampleHG(float g /* mean cosine */, float e1, float e2) {//importance sampling according to HG phase function
-#if 0//from realistic ray tracing by Shirley
-    float s=2.0*e1-1.0, f = (1.0-g*g)/(1.0+g*s), cost = 0.5*(1.0/g)*(1.0+g*g-f*f), sint = sqrtf(1.0-cost*cost);
-#else//previously <only one division so faster?>
-    float s = 1.0f - 2.0f*e1, denom = 1.0f + g*s;
-    float cost = (s + 2.0f*g*g*g*(-1.0f + e1) * e1 + g*g*s + 2.0f*g*(1.0f - e1 + e1*e1)) / (denom * denom), sint = sqrtf(1.0f - cost*cost);
-#endif
+vec sampleHG(float g, float e1, float e2) {
+    float s=2.0*e1-1.0, f = (1.0-g*g)/(1.0+g*s);
+    float cost = 0.5*(1.0/g)*(1.0+g*g-f*f), sint = sqrtf(1.0-cost*cost);
     return vec(cosf(2.0f * M_PI * e2) * sint, sinf(2.0f * M_PI * e2) * sint, cost);
 }
 
-Dev FI float HG_phase_function(float g, float cos_t){
+float HG_phase_function(float g, float cos_t){
     return (1-g*g)/(4.*M_PI*powf(1+g*g-2*g*cos_t,1.5));
 }
 
-// Dev FI Vec sampleHG0(float g_is_0, float e1, float e2) {
-// 	float cost = 1.0f - 2.0f*e1 , sint = sqrtf(1.0f - cost*cost);
-// 	return Vec(cosf(2.0f * M_PI * e2) * sint, sinf(2.0f * M_PI * e2) * sint, cost);
-// }
-Dev FI void generateOrthoBasis(vec &u, vec &v, vec w) {//w is normal
 
-    vec coVec;
-
-    //construct coVec to be orthogonal to w
-    if (fabs(w.x) <= fabs(w.y))
-        if (fabs(w.x) <= fabs(w.z)) coVec = vec(1,-w.z,w.y);
-        else coVec = vec(-w.y,w.x,1);
-    else if (fabs(w.y) <= fabs(w.z)) coVec = vec(-w.z,1,w.x);
-    else coVec = vec(-w.y,w.x,1);
-
-    //     Vec coVec = (fabsf(w.x) > 0.1f ? Vec(0.0f, 1.0f) : Vec(1.0f));
-
-    //     Vec coVec(2,3,5);
-
-    coVec = normalize(coVec);
-    u = cross(w, coVec);
-    v = cross(w, u);
-}
-
-FI Dev
-float transfer_function(float x, float scale){
-    //     return my_saturate(x * 5);
-    //     return my_saturate(x * 4);//for g_sigma_t=200 -> g_sigma_t=50
-    //     return my_saturate(x * 12.5);
-    //     return my_saturate(x * 25);
-    //     return my_saturate(x * 2);//for g_sigma_t=400 -> g_sigma_t=200
-//     return my_saturate(x * 5);//for g_sigma_t=400 -> g_sigma_t=200 //++++++++++++
-    //     return my_saturate(x * 25);//for 200*5 -> 40*25
-    return my_saturate(x * scale);
-}
-
-FI Dev
-float bg_radiance(vec dir){
-    //     return sq(dir.y+1);
-    return sq(dir.y+1) * 0.4;
-}
-
-FI Dev
-vec bg_radiance_color(vec dir){
-    //     return sq(dir.y+1);
-    //     return sq(dir.y+1) * 0.4;//++++++++++++++++++++++gray
-//     return vec(sq(dir.y+1),0.5,sq(dir.x+1)) * 0.4;//++++++++++++++++++++++++++color
-    //     return vec(
-    //         powf(f_max(dot(dir,vec(1,0,0)),0),10),
-    //         powf(f_max(dot(dir,vec(0,1,0)),0),10),
-    //         powf(f_max(dot(dir,vec(0,0,1)),0),10)
-    //         ) * 20;
-    //     return vec(.9,.8,.7)*powf(f_max(dot(dir,vec(1,0,0)),0),10)*20;
-   return vec(.7,.8,.9)*sq(dir.y+1) * 0.4;
-//      return vec(.7,.8,.9)*powf(f_max(dot(dir,vec(0,1,0)),0),5)*10;
-}
-
-
-FI Dev 
-vec ambient_intensity_CUDA(vec r, const float *d_pixels, 
+vec envmap_sample_dir(vec r, const float *d_pixels, 
     int width, int height)
 {
-    //bug is ray is -z direction
-//     float xi =(( r.x > 0 ? atanf(r.z/r.x) : atanf(r.z/r.x) + M_PI) + M_PI_2) / (2 * M_PI), yi = acosf(r.y)/M_PI;
-   
-    //fixed
     float xi =(( r.x >= 0 ? atanf(r.z/r.x) : atanf(r.z/r.x) + M_PI) + M_PI_2) / (2 * M_PI), yi = acosf(r.y)/M_PI;
 
     int x_ = int(xi*(width -1)+.5);
@@ -2181,48 +1484,8 @@ vec ambient_intensity_CUDA(vec r, const float *d_pixels,
     return vec(d_pixels[offset],d_pixels[offset+1], d_pixels[offset+2]);
 }
 
-__device__
-    float get_transmittance(const vec& a, const vec& b, const tex3d_proxy& pdensity_volume, const param& _p, int channel)
-{
-    float delta = 0.001; //good enough
-//     float delta = 0.005; //a little biased
-//     float delta = 0.01;//biased
-//     float delta = 0.02; //highly biased             //_p.STEP;
 
-    float optical_thickness = 0.0f;
-    ray light_ray(a,normalize(b-a));
-
-    float t_near, t_far;
-    bool shade_vol = intersect_vol(light_ray, pdensity_volume.min, pdensity_volume.max, t_near, t_far);
-    if(shade_vol)
-    {
-        vec dir = light_ray.d;
-        vec step = dir * delta;
-        float max_t = dist(a,b);
-
-        max_t = f_min(t_far, max_t);
-        float t1 = t_near;
-        vec pos = light_ray.advance(t_near);
-        float delta_transmittance_constant = _p.g_sigma_t*_p.sigma_t_channel[channel]*delta;
-        do{
-            float density = pdensity_volume.fetch_gpu(pos);
-            density = transfer_function(density, _p.g_density_scale);
-            optical_thickness += (density*delta_transmittance_constant);
-            pos = pos + step;
-            t1 += delta;
-        }while(t1 <= max_t);
-    }
-
-    float transmittance = expf(-optical_thickness);
-    return transmittance;
-}
-
-
-//better interface for get_transmittance: feed a test ray and max_t, and no need for external intersect_vol
-        //this should look better for both see-through rays and geometry-blocked rays, and geometry test should be outside
-
-__device__
-    float get_transmittance_woodcock(const vec& a, const vec& b, 
+float get_transmittance_woodcock(const vec& a, const vec& b, 
     const tex3d_proxy& pdensity_volume, const param& _p, int channel, 
         float inv_sigma_max, float inv_density_max)
 {
@@ -2254,7 +1517,6 @@ __device__
             }
             vec pos = light_ray.advance(dist);
             density = pdensity_volume.fetch_gpu(pos);
-            density = transfer_function(density, _p.g_density_scale);
             float e2 = RANDU;
             float fraction = density * inv_density_max;//assuming that sigma_t = density * g_sigma_t(scale factor) * sigma_t_channel[channel], and that the latter two are constants
             if(e2 < fraction)
@@ -2266,279 +1528,17 @@ __device__
     return count/nsamp;
 }
 
-
-
-FI Dev
-dir_light sample_important_direction(
-    const float *d_pixels, int texWidth, int texHeight, 
-    float *pu, float *Pu, float *pv, float *Pv
-    )//assuming no blockage by geometry
-{
-    dir_light ret;
-    int pixel_idx = sample_envmap_inverse_method(
-        ret.direction, ret.pdf, pu, Pu, pv, Pv, RANDU, RANDU, texWidth, texHeight);
-
-//     ret.radiance = 
-        //don't include phase function here (not before MIS is available), and neither the pdf should be premultiplied
-//         (M_1_PI * 0.25) / ret.pdf * ambient_intensity_CUDA(ret.direction, d_pixels, texWidth, texHeight); 
-//         (M_1_PI * 0.25) / ret.pdf * vec(d_pixels[pixel_idx*3+0],d_pixels[pixel_idx*3+1],d_pixels[pixel_idx*3+2]); 
-
-    ret.radiance = 
-//         ambient_intensity_CUDA(ret.direction, d_pixels, texWidth, texHeight); 
-        vec(d_pixels[pixel_idx*3+0],d_pixels[pixel_idx*3+1],d_pixels[pixel_idx*3+2]); 
-
-    return ret;
-}
-
-
-    void raytrace_volpath_multiscatter_channel_directlight__importance(
+void raytrace_volpath_multiscatter_channel_directlight__importance_nonspectral(
     KernelArray<ray> cam_ray_array,
     KernelArray<vec> pixels,
     tex3d_proxy pdensity_volume, 
     tex3d_proxy pemission_volume, 
     const float *d_pixels, int texWidth, int texHeight,
-    int width, int height, const param _p, int channel,
-    float *pu, float *Pu, float *pv, float *Pv,
-    dir_light *d_light, int n_light, int idx
-    )
-{
-//     int ix = threadIdx.x + blockIdx.x * blockDim.x;
-//     int iy = threadIdx.y + blockIdx.y * blockDim.y;
-//     if (ix >= width || iy >= height)
-//         return;
-//     int idx = ix + width * iy;
-//     curandStateXORWOW_t state = d_states[idx];
-
-    //     float albedo = 0.8; // sigma_s / sigma_t
-    float albedo = _p.albedo_channel[channel]; // sigma_s / sigma_t
-    //////////////////////////////////////////////////////////////////////////
-
-    ray cr(cam_ray_array[idx]);
-//     float radiance(pixels[idx][channel]);
-    float radiance(0);
-    float throughput = 1;
-    float through = 0;
-
-    /// for woodcock tracking
-    float density_max = 1.0f;
-    float sigma_max = density_max * _p.g_sigma_t * _p.sigma_t_channel[channel];
-    float inv_sigma_max = 1.0f / sigma_max;
-    float inv_density_max = 1.0f / density_max;
-
-    int max_depth(_p.trace_depth);
-    for(int depth=0; depth<max_depth; depth++)
-        //     for(int depth=0; depth<10; depth++)
-    {
-        float t_near, t_far;
-        bool shade_vol = intersect_vol(cr, pdensity_volume.min, pdensity_volume.max, t_near, t_far);
-
-        if(!shade_vol && depth==0 && _p.show_bg){
-            radiance = radiance +
-                ambient_intensity_CUDA(cr.d, d_pixels, texWidth, texHeight)[channel]
-            * (_p.g_light_scale * throughput);
-            break;
-        }
-
-        vec front = cr.advance(t_near);
-        vec back = cr.advance(t_far);
-
-        if(shade_vol)
-        {
-            /// woodcock tracking
-
-            vec pos = front;//current incident radiance evaluation point
-            float dist = t_near;
-            float density;
-
-            while(1){
-                dist += -logf(1-RANDU) * inv_sigma_max;
-                if(dist >= t_far){
-                    through = 1;//transmitted through the volume, probability is 1-exp(-optical_thickness)
-                    break;
-                }
-                pos = cr.advance(dist);
-                density = pdensity_volume.fetch_gpu(pos);
-                density = transfer_function(density, _p.g_density_scale);
-                float e2 = RANDU;
-                float fraction = density * inv_density_max;//assuming that sigma_t = density * g_sigma_t(scale factor) * sigma_t_channel[channel], and that the latter two are constants
-                if(e2 < fraction)
-                {
-                    break;
-                }
-            }
-
-            if(0==through)
-            {
-#if 0//wrong solutions but worked pretty close "thanks" to duplication
-/*
-#if PLACER_01
-                vec random_dir = sampleSphere(RANDU, RANDU);
-                float transmittance = 
-                    get_transmittance_woodcock(pos, pos+random_dir*1e3, pdensity_volume, _p, channel,
-                    state, inv_sigma_max, inv_density_max);
-                float attenuated_radiance = 
-                    ambient_intensity_CUDA(random_dir, d_pixels, texWidth, texHeight)[channel]
-                    * _p.g_light_scale * transmittance;
-                float scattered_radiance = attenuated_radiance 
-                    * (_p.sigma_s_channel[channel]*_p.g_density*density);//wrong::<...which works just like emission, and integrated the same way
-                radiance = radiance +
-                    scattered_radiance
-                    * throughput;
-#endif
-                //apply before "throughput *= albedo" because the radiance is evaluated as scattered, not just attenuated
-#if 0//backup but not guaranteed//wrong but works pretty close when there's duplication
-                vec random_dir = sampleSphere(RANDU, RANDU);
-                float transmittance = 
-                    get_transmittance_woodcock(pos, pos+random_dir*1e3, pdensity_volume, _p, channel,
-                    state, inv_sigma_max, inv_density_max);
-                radiance = radiance +
-                    ambient_intensity_CUDA(random_dir, d_pixels, texWidth, texHeight)[channel]
-                * (_p.g_light_scale * throughput * transmittance * 
-                    _p.sigma_s_channel[channel]*_p.g_density*density / *local sigma_s* /);
-*/
-#else//theoretically correct but not working well due to other parts causing duplication
-                //solution for the problem: in fact direct lighting for the level_1 vertex is duplicated by
-                //straight-through radiance evaluation by secondary ray in level_2 vertex sampling
-                //FACT: duplication does not exist for eye ray, only for secondary rays
-                //MORE on this: similar to direct lighting in surface integral path tracing,
-                //luminaire_s don't contribute emission except for eye rays(primary rays)
-#if 0
-                //random sampling for direct lighting
-                vec random_dir = sampleSphere(RANDU, RANDU);
-                float transmittance = 
-                    get_transmittance_woodcock(pos, pos+random_dir*1e3, pdensity_volume, _p, channel,
-                    state, inv_sigma_max, inv_density_max);
-                float attenuated_radiance = 
-                    ambient_intensity_CUDA(random_dir, d_pixels, texWidth, texHeight)[channel]
-                    * _p.g_light_scale * transmittance;
-                radiance = radiance +
-//                     attenuated_radiance * (_p.sigma_s_channel[channel] / _p.sigma_t_channel[channel]) //scattered(sigma_s) and considering woodcock estimator(sigma_t), and can be combined into albedo
-                    attenuated_radiance * (_p.albedo_channel[channel]) //scattered(sigma_s) and considering woodcock estimator(sigma_t), and can be combined into albedo
-                    * throughput;
-#elif 0
-                //////////////////////////////////////////////////////////////////////////
-                //importance sampling on the fly, very slow
-                dir_light envmap_dl = sample_important_direction(d_pixels, texWidth, texHeight, pu, Pu, pv, Pv, state);
-                float transmittance = 
-                    get_transmittance_woodcock(pos, pos+envmap_dl.direction*1e3, pdensity_volume, _p, channel,
-                    state, inv_sigma_max, inv_density_max);
-                float attenuated_radiance = 
-                    envmap_dl.radiance[channel]
-                    * _p.g_light_scale * transmittance;
-                radiance = radiance +
-                    attenuated_radiance * ((M_1_PI * 0.25) / envmap_dl.pdf)//for uniform sampling and isotropic scattering, this term equals one
-                    * throughput * _p.albedo_channel[channel];
-                //////////////////////////////////////////////////////////////////////////
-#elif 0
-                //////////////////////////////////////////////////////////////////////////
-                //precomputed importance sampling envmap, faster
-                dir_light envmap_dl = d_light[int(RANDU*n_light)];
-                float transmittance = 
-                    get_transmittance_woodcock(pos, pos+envmap_dl.direction*1e3, pdensity_volume, _p, channel,
-                    state, inv_sigma_max, inv_density_max);
-                float attenuated_radiance = 
-                    envmap_dl.radiance[channel]
-                    * _p.g_light_scale * transmittance;
-                radiance = radiance +
-                    attenuated_radiance * ((M_1_PI * 0.25) / envmap_dl.pdf)//for uniform sampling and isotropic scattering, this term equals one
-                    * throughput * _p.albedo_channel[channel];
-                //////////////////////////////////////////////////////////////////////////
-#else
-                //////////////////////////////////////////////////////////////////////////
-                //precomputed importance sampling envmap, faster, and trying to fix for singularity
-                dir_light envmap_dl = d_light[int(RANDU*n_light)];
-                float transmittance = 
-                    get_transmittance_woodcock(pos, pos+envmap_dl.direction*1e3, pdensity_volume, _p, channel,
-                     inv_sigma_max, inv_density_max);
-                float attenuated_radiance = 
-                    envmap_dl.radiance[channel]
-                    * _p.g_light_scale * transmittance;
-                radiance = radiance +
-                    attenuated_radiance * ((M_1_PI * 0.25) / envmap_dl.pdf)//for uniform sampling and isotropic scattering, this term equals one
-                    * throughput * _p.albedo_channel[channel] * my_saturate(_p.c_alpha*density+_p.c_beta);
-                //////////////////////////////////////////////////////////////////////////
-#endif
-#endif
-                
-                //////////////////////////////////////////////////////////////////////////
-                throughput *= albedo; //direct light evaluation should be attenuated, but not scattered yet, thus should go through this
-
-//                 vec dir = sampleSphere(RANDU, RANDU);//++++++++++++++++++
-                //                     vec dir = sampleHG(0.8f,RANDU, RANDU);//forward scattering is just like extinction
-                //                     vec dir = sampleHG(-0.8f,RANDU, RANDU);
-                //                     vec dir = sampleHG(density,RANDU, RANDU);       //strange looking
-                //                     vec dir = sampleHG(-density,RANDU, RANDU);      //strange looking
-                //                     vec dir = sampleHG(RANDU>0.3?0.5:-0.5,RANDU, RANDU);
-                //                     vec dir = sampleHG(RANDU>0.5?0.8:-0.8,RANDU, RANDU);
-                //                     vec dir = sampleHG(RANDU>0.8?0.9:0,RANDU, RANDU);//++compare with isotropic
-//                                   vec dir = sampleHG(0.85,RANDU, RANDU);//++compare with isotropic
-                                  vec dir = sampleHG(_p.HG_mean_cosine,RANDU, RANDU);//++compare with isotropic
-                vec u,v;
-                generateOrthoBasis(u, v, cr.d);
-                dir = u * dir.x + v * dir.y + cr.d * dir.z;//by construction of the sample coordinates, dir is guaranteed to be unit
-                cr = ray(pos, dir);
-
-                //PLACER_01
-                
-            }
-            else
-            {
-                if(depth==0 && _p.show_bg)//confine luminaire contribution to eye rays, if there's not this condition it causes duplication of luminaire radiance
-                                //this is common sense in direct lighting BRDF path tracing?? 
-                                // <the so-called next event estimation, where duplication is efectively duplicating the events>
-                {
-                    radiance = radiance +
-                        ambient_intensity_CUDA(cr.d, d_pixels, texWidth, texHeight)[channel]
-                        * (_p.g_light_scale * throughput);
-                }
-                
-                break;
-            }
-
-        }
-    }
-
-    //     radiance = radiance + bg_radiance_color(cr.d) * (_p.g_light_scale * throughput * through);
-
-    //     {
-    //         radiance = radiance +
-    //             ambient_intensity_CUDA(cr.d, d_pixels, texWidth, texHeight)[channel]
-    //         * (_p.g_light_scale * throughput * through);
-    //     }
-
-    if(radiance!=radiance) radiance=0; //NAN? 
-    pixels[idx][channel] += radiance;
-
-//     pixels[idx][channel] = radiance;
-//     d_states[idx] = state;
-}
-
-
-
-
-/************************************************************************/
-/*                                                                      */
-/************************************************************************/
-__global__
-    void raytrace_volpath_multiscatter_channel_directlight__importance_nonspectral(
-    KernelArray<ray> cam_ray_array,
-    KernelArray<vec> pixels,
-    tex3d_proxy pdensity_volume, 
-    tex3d_proxy pemission_volume, 
-    const float *d_pixels, int texWidth, int texHeight,
-//     curandStateXORWOW_t *d_states,
     int width, int height, const param _p,
     float *pu, float *Pu, float *pv, float *Pv,
-    dir_light *d_light, int n_light, int idx
-    )
+    dir_light *d_light, int n_light, int idx, 
+    float density_max)
 {
-//     int ix = threadIdx.x + blockIdx.x * blockDim.x;
-//     int iy = threadIdx.y + blockIdx.y * blockDim.y;
-//     if (ix >= width || iy >= height)
-//         return;
-//     int idx = ix + width * iy;
-//     curandStateXORWOW_t state = d_states[idx];
-
     float albedo = _p.albedo; // sigma_s / sigma_t
     //////////////////////////////////////////////////////////////////////////
 
@@ -2547,7 +1547,6 @@ __global__
     vec throughput(1,1,1);
 
     /// for woodcock tracking
-    float density_max = 1.0f;
     float sigma_max = density_max * _p.g_sigma_t;
     float inv_sigma_max = 1.0f / sigma_max;
     float inv_density_max = 1.0f / density_max;
@@ -2560,7 +1559,7 @@ __global__
 
         if(!shade_vol && depth==0 && _p.show_bg){
             radiance = radiance +
-                mult(ambient_intensity_CUDA(cr.d, d_pixels, texWidth, texHeight),throughput)
+                mult(envmap_sample_dir(cr.d, d_pixels, texWidth, texHeight),throughput)
                 * _p.g_light_scale;
             break;
         }
@@ -2584,7 +1583,6 @@ __global__
                 }
                 pos = cr.advance(dist);
                 density = pdensity_volume.fetch_gpu(pos);
-                density = transfer_function(density, _p.g_density_scale);
                 float e2 = RANDU;
                 float fraction = density * inv_density_max;//assuming that sigma_t = density * g_sigma_t(scale factor) * sigma_t_channel[channel], and that the latter two are constants
                 if(e2 < fraction)
@@ -2595,6 +1593,8 @@ __global__
 
             if(0==through)
             {
+                throughput = throughput * albedo; //all subsequent light evaluations are scattered
+ 
                 dir_light envmap_dl = d_light[int(RANDU*n_light)];
                 float transmittance = 
                     get_transmittance_woodcock(pos, pos+envmap_dl.direction*1000.0f, pdensity_volume, _p, 0,
@@ -2604,19 +1604,15 @@ __global__
                     * (_p.g_light_scale * transmittance);
                 radiance = radiance +
                     mult(attenuated_radiance,throughput) * (
-//                     ((M_1_PI * 0.25) / envmap_dl.pdf)//previously using spherical for direct lighting despite scattering using HG
                     ((HG_phase_function(_p.HG_mean_cosine, dot(cr.d, envmap_dl.direction))) / envmap_dl.pdf)//fixed to use HG always
-                    * (albedo * my_saturate(_p.c_alpha*density+_p.c_beta)));
-                throughput = throughput * albedo; //direct light evaluation should be attenuated, but not scattered yet, thus should go through this
+                    * (my_saturate(_p.c_alpha*density+_p.c_beta)));
 
-#if 0//always uniformly sample secondary rays //not good performance though
-                vec dir = sampleSphere(RANDU, RANDU);//++++++++++++++++++
-                throughput = throughput * (HG_phase_function(_p.HG_mean_cosine, dot(cr.d, dir))/(M_1_PI * 0.25));
-#else
-                vec dir = sampleHG(_p.HG_mean_cosine,RANDU, RANDU);//++compare with isotropic
-#endif
-                vec u,v;
-                generateOrthoBasis(u, v, cr.d);
+                vec dir = sampleHG(_p.HG_mean_cosine,RANDU, RANDU);
+                vec ref_dir(2,3,5);
+                ref_dir = normalize(ref_dir);
+                vec u = normalize(cross(cr.d, ref_dir));
+                vec v = cross(cr.d, u);
+
                 dir = u * dir.x + v * dir.y + cr.d * dir.z;//by construction of the sample coordinates, dir is guaranteed to be unit
                 cr = ray(pos, dir);
             }
@@ -2625,7 +1621,7 @@ __global__
                 if(depth==0 && _p.show_bg)
                 {
                     radiance = radiance +
-                        mult(ambient_intensity_CUDA(cr.d, d_pixels, texWidth, texHeight),throughput)
+                        mult(envmap_sample_dir(cr.d, d_pixels, texWidth, texHeight),throughput)
                         * _p.g_light_scale;
                 }
                 
@@ -2639,90 +1635,34 @@ __global__
         if(radiance[n]!=radiance[n]) radiance[n]=0; //NAN? 
 
     pixels[idx] = pixels[idx] + radiance;
-
-//     d_states[idx] = state;
 }
 
-#define NOT(x) (!(x))
-#define STATIC_LIGHT 0
-
 tex3d *g_vol;
-tex3d_vec *g_vol_grad;
-
-// int iw(400), ih(400);
-// int iw(500), ih(500);
-// int iw(300), ih(300);
-// int iw(600), ih(600);
-// int iw(1600), ih(1600);
-
-struct increment{
-    int x;
-    increment():x(0){}
-    int operator()(void){
-        return x++;
-    }
-};
-increment inc;
 
 struct vec_scale_op{
     float _s;
     vec_scale_op(float s):_s(s){}
-    HaD
-        vec operator()(vec x){
+    vec operator()(vec x){
             return x*_s;
     }
-};//strangely this can only be declared globally (cudacc bug??)
+};
 
-// static float global_time=0;
 void render(char *filename) 
 {
     tex3d& vol = *g_vol;
 
-//     float dist = 2;//zoomed out
-//     float dist = 1;//zoomed in
     float dist = _p.dist;
-//     float fov = 45;
     float fov = _p.fov;
-
-//     static float global_time=0;
 
     vec lookat(0,0,0);
     vec up(0,1,0);
-#if 0
-    vec cam_o(dist*sinf(_p.global_time),0.2,dist*cosf(_p.global_time));
-    vec cam_d(normalize(lookat-cam_o));
-#else
     vec cam_o(_p.camera_origin[0],_p.camera_origin[1],_p.camera_origin[2]);
     vec cam_d(normalize(vec(_p.camera_direction[0],_p.camera_direction[1],_p.camera_direction[2])));
-#endif
     vec cam_x(normalize(cross(cam_d,up)));
     vec cam_y(cross(cam_x,cam_d));
 
-#if NOT(STATIC_LIGHT)
-    vec light_pos0(lookat+cam_x*1.5f);
-    vec light_pos1(lookat+cam_x*-1.5f);
-#endif
     _p.global_time += 0.1;
 
-#if 0
-//     std::vector<unsigned char> frame;
-//     frame.resize(iw*ih*3);
-    for(int j=0; j<ih; j++){
-#pragma omp parallel for
-        for(int i=0; i<iw; i++){
-            ray r(cam_o, cam_d
-                +cam_x*(signed_map(i,iw)*tan(fov*0.5/180.0f*M_PI))
-                +cam_y*(signed_map(ih-1-j,ih)*tan(fov*0.5/180.0f*M_PI)));
-            vec c = raytrace_vol_alpha(r,vol,light_pos0,vol_grad);
-//             vec c = raytrace_vol_sigma(r,vol,light_pos0,vol_grad);
-            //                 vec c = randf();
-            int offset = (i+j*iw)*3;
-            tD.texBuf.mBuf[offset  ] = c.x;
-            tD.texBuf.mBuf[offset+1] = c.y;
-            tD.texBuf.mBuf[offset+2] = c.z;
-        }
-    }
-#else
     dvec<vec> fb(_p.iw*_p.ih);
     hvec<ray> hcam_rays(_p.iw*_p.ih);
     for(int j=0; j<_p.ih; j++){
@@ -2735,106 +1675,12 @@ void render(char *filename)
         }
     }
     dvec<ray> cam_rays = hcam_rays;
-//     #define NB_THREADS_X 8
-//     #define NB_THREADS_Y 8
-//     int nbbx = (_p.iw +NB_THREADS_X -1)/ NB_THREADS_X;
-//     int nbby = (_p.ih +NB_THREADS_Y -1)/ NB_THREADS_Y;
-//     dim3 nbBlocks(nbbx,nbby);
-//     dim3 threadsPerBlock(NB_THREADS_X, NB_THREADS_Y);
-// #define LAUNCH_SPEC nbBlocks, threadsPerBlock
     printf("DEBUG::launching kernel\n");
 
-    //colormap raycasting
-//     if(_p.pregen_grad)
-//     {
-//         tex3d_vec& vol_grad = *g_vol_grad;
-//         raytrace_vol_alpha<<<LAUNCH_SPEC>>>(cam_rays, fb, vol.get_proxy(), light_pos0,
-//             vol_grad.get_proxy(), _c.get_proxy(), _p.iw, _p.ih, _p);
-//     }
-//     else
-//     {
-//         tex3d_vec_proxy _null;
-//         raytrace_vol_alpha<<<LAUNCH_SPEC>>>(cam_rays, fb, vol.get_proxy(), light_pos0,
-//             _null, _c.get_proxy(), _p.iw, _p.ih, _p);
-// 
-//     }
-
-#if 0//single <compare raycast/woodcock>
-    raytrace_volpath_singlescatter<<<LAUNCH_SPEC>>>(cam_rays, fb, 
-        vol.get_proxy(), vol.get_proxy(), //for simplicity use density for illumination strength, anyway, this routine is only for debugging woodcock tracking
-        g_rng->getHandle(), _p.iw, _p.ih, _p);
-#elif 0//multi
-    thrust::fill(fb.begin(),fb.end(),vec(0));
-//     int spp = 1000;
-    int spp = _p.spp;
-    for(int k=0; k<spp; k++)
-    {
-//         printf("[");
-        raytrace_volpath_multiscatter<<<LAUNCH_SPEC>>>(cam_rays, fb, 
-            vol.get_proxy(), vol.get_proxy(), //for simplicity use density for illumination strength, anyway, this routine is only for debugging woodcock tracking
-            ppm.p_d_rawPixels, ppm.width, ppm.height,
-            g_rng->getHandle(), _p.iw, _p.ih, _p);
-        cudaDeviceSynchronize();
-//         printf("]");
-//         if(19==k%20)printf("\n");
-        printf("\rfinished %.2f%%",100.0f*float(k+1)/float(spp));
-    }
-    thrust::transform(fb.begin(), fb.end(), fb.begin(), vec_scale_op(1.0f/spp));
-#elif 0 //channel multi
-    thrust::fill(fb.begin(),fb.end(),vec(0));
-    int spp = _p.spp;
-    for(int k=0; k<spp; k++)
-    {
-        for(int channel=0; channel<3; channel++)
-        {
-            raytrace_volpath_multiscatter_channel<<<LAUNCH_SPEC>>>(cam_rays, fb, 
-                vol.get_proxy(), vol.get_proxy(), //for simplicity use density for illumination strength, anyway, this routine is only for debugging woodcock tracking
-                ppm.p_d_rawPixels, ppm.width, ppm.height,
-                g_rng->getHandle(), _p.iw, _p.ih, _p, channel);
-            cudaDeviceSynchronize();
-        }
-        printf("\rfinished %.2f%%",100.0f*float(k+1)/float(spp));
-    }
-    thrust::transform(fb.begin(), fb.end(), fb.begin(), vec_scale_op(1.0f/spp));
-#elif 0 //channel multi directlight straight/uniform
-    thrust::fill(fb.begin(),fb.end(),vec(0));
-    int spp = _p.spp;
-    for(int k=0; k<spp; k++)
-    {
-        for(int channel=0; channel<3; channel++)
-        {
-//             raytrace_volpath_multiscatter_channel_directlight__straight //1)
-            raytrace_volpath_multiscatter_channel_directlight__random       //2)
-                <<<LAUNCH_SPEC>>>(cam_rays, fb, 
-                vol.get_proxy(), vol.get_proxy(), //for simplicity use density for illumination strength, anyway, this routine is only for debugging woodcock tracking
-                ppm.p_d_rawPixels, ppm.width, ppm.height,
-                g_rng->getHandle(), _p.iw, _p.ih, _p, channel);
-            cudaDeviceSynchronize();
-        }
-        printf("\rfinished %.2f%%",100.0f*float(k+1)/float(spp));
-    }
-    thrust::transform(fb.begin(), fb.end(), fb.begin(), vec_scale_op(1.0f/spp));
-#else //channel multi directlight importance sampled envmap
     std::fill(fb.begin(),fb.end(),vec(0));
     int spp = _p.spp;
     for(int k=0; k<spp; k++)
     {
-#if 0//spectral
-        for(int channel=0; channel<3; channel++)
-        {
-            raytrace_volpath_multiscatter_channel_directlight__importance
-                <<<LAUNCH_SPEC>>>(cam_rays, fb, 
-                vol.get_proxy(), vol.get_proxy(), //for simplicity use density for illumination strength, anyway, this routine is only for debugging woodcock tracking
-                ppm.p_d_rawPixels, ppm.width, ppm.height,
-                g_rng->getHandle(), _p.iw, _p.ih, _p, channel,
-                ppm.pu_device, ppm.Pu_device, ppm.pv_device, ppm.Pv_device,
-                RAW(ppm.d_light), ppm.d_light.size());
-            cudaDeviceSynchronize();
-        }
-        printf("\rfinished %.2f%%",100.0f*float(k+1)/float(spp));
-    }
-#else//non-spectral
-
         for(int idx=0; idx<_p.iw*_p.ih; idx++)
         {
             raytrace_volpath_multiscatter_channel_directlight__importance_nonspectral
@@ -2843,13 +1689,11 @@ void render(char *filename)
                 ppm.p_d_rawPixels, ppm.width, ppm.height,
                 _p.iw, _p.ih, _p, 
                 ppm.pu_device, ppm.Pu_device, ppm.pv_device, ppm.Pv_device,
-                RAW(ppm.d_light), ppm.d_light.size(), idx);
+                RAW(ppm.d_light), ppm.d_light.size(), idx, _p.density_max);
         }
         printf("\rfinished %.2f%%",100.0f*float(k+1)/float(spp));
     }
-#endif
     std::transform(fb.begin(), fb.end(), fb.begin(), vec_scale_op(1.0f/spp));
-#endif
 
     printf("\rDEBUG::kernel finished\n");
 
@@ -2865,285 +1709,53 @@ void render(char *filename)
             tD.texBuf.mBuf[offset*3+2] = c.z;
         }
     }
-#endif
 
-#if 1
-    float max_ = 1;
-    {
-        float max__ = -1;
-        for(int n=0; n<_p.iw*_p.ih; n++){
-            max__ = f_max(max__, tD.texBuf.mBuf[n]);
-        }
-        printf("color max=%f\n",max__);
+    printf("color range: [%f, %f] \n",
+        *std::min_element(tD.texBuf.mBuf, tD.texBuf.mBuf+_p.iw*_p.ih),
+        *std::max_element(tD.texBuf.mBuf, tD.texBuf.mBuf+_p.iw*_p.ih));
 
-//         max_ *= 0.5;
-    }
-#else
-    static float max_ = -1;
-    if(inc.x==0)
-    {
-        for(int n=0; n<iw*ih; n++){
-            max_ = f_max(max_, tD.texBuf.mBuf[n]);
-        }
-        printf("max=%f\n",max_);
-
-//         max_ *= 0.5;
-    }
-#endif
-
-    for(int j=_p.ih-1; j>=0; j--){
-#pragma omp parallel for
-        for(int i=0; i<_p.iw; i++){
-            int offset = (i+(_p.ih-1-j)*_p.iw)*3;
-//             tD.texBuf.mBuf[offset  ] = my_saturate(powf(tD.texBuf.mBuf[offset  ]/max_,1/2.2));  //oriiginal +++++++++++
-//             tD.texBuf.mBuf[offset+1] = my_saturate(powf(tD.texBuf.mBuf[offset+1]/max_,1/2.2));  //oriiginal +++++++++++
-//             tD.texBuf.mBuf[offset+2] = my_saturate(powf(tD.texBuf.mBuf[offset+2]/max_,1/2.2));  //oriiginal +++++++++++
-//             tD.texBuf.mBuf[offset  ] = powf(tD.texBuf.mBuf[offset  ],1/2.2);
-//             tD.texBuf.mBuf[offset+1] = powf(tD.texBuf.mBuf[offset+1],1/2.2);
-//             tD.texBuf.mBuf[offset+2] = powf(tD.texBuf.mBuf[offset+2],1/2.2);
-            tD.texBuf.mBuf[offset  ] = tD.texBuf.mBuf[offset  ];
-            tD.texBuf.mBuf[offset+1] = tD.texBuf.mBuf[offset+1];
-            tD.texBuf.mBuf[offset+2] = tD.texBuf.mBuf[offset+2];
-        }
-    }
     tD.update();
 
     tD.printScreen(filename);
     printf("Rendered to %s\n",filename);
 
+    //not tonemapped
     save_hdr_image(tD.texBuf.mBuf, _p.iw, _p.ih, "_additional.bin");
 }
-
-struct complex{
-    float x, y;
-    complex(){}
-};
-float abs(const complex& x){ return sqrtf(x.x*x.x+x.y*x.y); }
-
-std::vector<complex> phi;
-
 
 int main(int argc, char *argv[]){
     system("mkdir ppm");
 
     printf("DEBUG:: begin program\n");
-//     for(;;){}
     tex3d vol(DEFAULT_DIM,1,vec(-0.5));
-// #pragma omp parallel for
-//     for(int k=0; k<DEFAULT_DIM; k++){
-//         for(int j=0; j<DEFAULT_DIM; j++){
-//             for(int i=0; i<DEFAULT_DIM; i++){
-//                 vol(i,j,k) = 1/(1+0.1*sqrt(sq(i-DEFAULT_DIM/2)+sq(j-DEFAULT_DIM/2)+sq(k-DEFAULT_DIM/2)));
-//             }
-//         }
-//     }
-//     vol.load_binary("vol_1.bin");//+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-//     vol.load_binary("sample_cloud.bin");
-//     vol.load_binary("sample_cloud.bin");
-//     vol.load_binary_raw("vl3d_raw_0000002130.bin");
-//     vol.load_binary("vl3d_raw_0000002501.bin");              //********
-//     vol.load_binary("vl3d_raw_0000002501x.bin");              //********
-//     vol.load_binary_raw("vl3d_0000002130.bin");           //********
 
-//     vol.load_binary("vl3d_raw_0000001251_100.bin");              //********
-//     vol.load_binary("vl3d_raw_0000001251_200.bin");              //********************
-//     vol.load_binary("vl3d_raw_0000000111_512.bin");              //********
-//     vol.load_binary("vl3d_raw_0000000111_512_ring.bin");              //********
-//     vol.load_binary("vl3d_raw_0000000111_512_vel.bin");              //********++++++++++
-//     vol.load_binary("vl3d_raw_0000000111_200.bin");              //********++++++++++
-//     if(argc>1){
-//         vol.load_binary(argv[1]);              //********++++++++++
-//     }
-//     else
-//     {
-// //         vol.load_binary("vl3d_raw_0000000111_100.bin");              //********++++++++++
-// //         vol.load_binary("vl3d_raw_0000001251_200.bin");              //********++++++++++
-// //         vol.load_binary("vl3d_raw_0000000111_512_curl.bin");              //********++++++++++
-// 
-// 
-//             vol.load_binary_raw("vl3d_raw_0000002130.bin");//F0=1
-// //         vol.load_binary("vl3d_raw_0000000111_512.bin");              //********++++++++++
-//     }
-
-    //////////////////////////////////////////////////////////////////////////
-//     vol.init_implicit(2);
-//     vol.init_metaball();
-    vol.load_binary(_p.load_fn);//++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+    vol.init_simple();
+//     vol.load_binary(_p.load_fn);
     vol.threshold(_p.threshold);
-
     vol.normalize();
 
-//     vol.sub_volume(vec(0,0,25),vec(50,50,75));
-//     vol.binarize(0.5);
-//     vol.binarize(0.45,0.55);
-//     vol.binarize(0.15,0.2);
-//     vol.binarize(0.05);
-//     vol.binarize(0.02);//+++++++++++++++++++
+    _p.density_max = vol.max_element();
+    printf("maximum density is %f\n",_p.density_max);
 
     g_vol = &vol;
 
-
-//     {
-//         int N = vol.N;
-// #pragma omp parallel for
-//         for(int k=0; k<N; k++){
-//             for(int j=0; j<N; j++){
-//                 for(int i=0; i<N; i++){
-//                     vol(i,j,k) = vol(i,j,k) * 0.1;
-//                 }
-//             }
-//         }
-//     }
-
-
-
-//TODO: use normal to shade
-//     tex3d vol2 = vol;
-//     tex3d vol_dx = vol;
-//     tex3d vol_dy = vol;
-//     tex3d vol_dz = vol;
-//     tex3d_vec vol_grad(vol.N,1,vec(-0.5));
-//     int N=vol_grad.N;
-#if 0
-    if(_p.pregen_grad)
-    {
-        g_vol_grad = new tex3d_vec(vol.N,1,vec(-0.5));
-        int N = g_vol_grad->N;
-        tex3d_vec& vol_grad = *g_vol_grad;
-        if(_p.use_sobol)
-        {
-#pragma omp parallel for
-            for(int k=0; k<N; k++){
-                for(int j=0; j<N; j++){
-                    for(int i=0; i<N; i++){
-                        int ip = (i+1)%N;
-                        int in = (i-1+N)%N;
-                        int jp = (j+1)%N;
-                        int jn = (j-1+N)%N;
-                        int kp = (k+1)%N;
-                        int kn = (k-1+N)%N;
-                        vol_grad(i,j,k) = //normalize
-                           //Sobel 3D Operator
-                            -vec(
-                            6*(vol(ip,j,k)-vol(in,j,k))
-                            +3*((vol(ip,jp,k)-vol(in,jp,k))
-                            +   (vol(ip,jn,k)-vol(in,jn,k))
-                            +   (vol(ip,j,kp)-vol(in,j,kp))
-                            +   (vol(ip,j,kn)-vol(in,j,kn)))
-                            +((vol(ip,jp,kp)-vol(in,jp,kp))
-                            + (vol(ip,jn,kp)-vol(in,jn,kp))
-                            + (vol(ip,jp,kn)-vol(in,jp,kn))
-                            + (vol(ip,jn,kn)-vol(in,jn,kn))),
-
-                            6*(vol(i,jp,k)-vol(i,jn,k))
-                            +3*((vol(ip,jp,k)-vol(ip,jn,k))
-                            +   (vol(in,jp,k)-vol(in,jn,k))
-                            +   (vol(i,jp,kp)-vol(i,jn,kp))
-                            +   (vol(i,jp,kn)-vol(i,jn,kn)))
-                            +((vol(ip,jp,kp)-vol(ip,jn,kp))
-                            + (vol(in,jp,kp)-vol(in,jn,kp))
-                            + (vol(ip,jp,kn)-vol(ip,jn,kn))
-                            + (vol(in,jp,kn)-vol(in,jn,kn))),
-
-                            6*(vol(i,j,kp)-vol(i,j,kn))
-                            +3*((vol(i,jp,kp)-vol(i,jp,kn))
-                            +   (vol(i,jn,kp)-vol(i,jn,kn))
-                            +   (vol(ip,j,kp)-vol(ip,j,kn))
-                            +   (vol(in,j,kp)-vol(in,j,kn)))
-                            +((vol(ip,jp,kp)-vol(ip,jp,kn))
-                            + (vol(ip,jn,kp)-vol(ip,jn,kn))
-                            + (vol(in,jp,kp)-vol(in,jp,kn))
-                            + (vol(in,jn,kp)-vol(in,jn,kn)))
-
-                            );
-                    }
-                }
-            }
-        }
-        else
-        {
-#pragma omp parallel for
-            for(int k=0; k<N; k++){
-                for(int j=0; j<N; j++){
-                    for(int i=0; i<N; i++){
-                        int ip = (i+1)%N;
-                        int in = (i-1+N)%N;
-                        int jp = (j+1)%N;
-                        int jn = (j-1+N)%N;
-                        int kp = (k+1)%N;
-                        int kn = (k-1+N)%N;
-                        vol_grad(i,j,k) = //normalize
-                            (
-                            vec(vol(in,j,k)-vol(ip,j,k),
-                            vol(i,jn,k)-vol(i,jp,k),
-                            vol(i,j,kn)-vol(i,j,kp)));
-                    }
-                }
-            }
-        }
-    //     g_vol_grad = &vol_grad;
-
-        //rescale largest vector to unit
-        float inv_max = 1.0/length(vol_grad.max_element());
-#pragma omp parallel for
-        for(int k=0; k<N; k++){
-            for(int j=0; j<N; j++){
-                for(int i=0; i<N; i++){
-                    vol_grad(i,j,k) = vol_grad(i,j,k)*inv_max;
-                }
-            }
-        }
-        g_vol_grad->toDevice();
-    }
-#endif
-
-
-    //init the proxies
     g_vol->toDevice();
-    _c.toDevice();
 
     printf("init complete\n");
 
     tD.init(_p.iw,_p.ih,_RGB);
 
-//     th_rng _rng(_p.iw, _p.ih);
-//     g_rng = &_rng;
-
-//     ppm.openImageFile_hdr("envmap2.bin");
-//     ppm.openImageFile_hdr(_p.envmap);
     ppm.openImageFile_hdr(_p.envmap,1,_p.env_rotate);
 
-//     tD.regRender(render);
 
-//     if(argc>1){
+    printf("DEBUG::preparing to render\n");
 
-//             global_time = 0.5;//angle a
-//             global_time = 1.4;//angle b
-
-            printf("DEBUG::preparing to render\n");
-//                 render("test.ppm");
-
-            for(int n=0; n<_p.max_render; n++)
-            {
-                char fn[256];
-                sprintf(fn,"ppm/test_%05d.ppm",n);
-                render(fn);
-            }
-//     }
-//     else
-//     {
-//         while(1){
-//             char filename[2048];
-//             sprintf(filename, "ppm/vortex_ring_%05d.ppm", inc());
-//             render(filename);
-//         }
-//     }
-#if 0
-            if(_p.pregen_grad)
-            {
-                delete g_vol_grad;
-            }
-#endif
+    for(int n=0; n<_p.max_render; n++)
+    {
+        char fn[256];
+        sprintf(fn,"ppm/test_%05d.ppm",n);
+        render(fn);
+    }
 
     return 0;
 }
