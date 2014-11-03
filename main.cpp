@@ -10,356 +10,13 @@
 #include <cassert>
 #include <string>
 
-
-#ifndef texDisplay_h__
-#define texDisplay_h__
-
-#define __device__
-#define __host__
-#define __global__
+#define ANALYTIC 1
 
 float randf(){ return rand()/float(RAND_MAX+1); }
 #define RANDU randf()
 
-
-template <typename T>
-class texBuffer
-{
-public:
-    T *mBuf;
-    T *mOffset;
-    size_t mTotal;
-    size_t mOffsetN;
-    size_t *mSampCount;
-
-    texBuffer():mBuf(0),mSampCount(0){}
-    ~texBuffer()
-    {
-        if(mBuf) delete [] mBuf;
-        if(mSampCount) delete [] mSampCount;
-    }
-    void init(size_t _mTotal)
-    {
-        mTotal = _mTotal;
-        mBuf = new T[mTotal];
-        mSampCount = new size_t[mTotal];
-        mOffset = mBuf;
-        mOffsetN = 0;
-        reset();
-    }
-    void rewind() // return pointer to head
-    {
-        mOffset = mBuf;
-        mOffsetN = 0;
-    }
-    void reset()
-    {
-        rewind();
-        memset(mBuf,0,sizeof(T)*mTotal);
-        memset(mSampCount,0,sizeof(size_t)*mTotal);
-//         for(size_t n =0; n<mTotal; n++){
-//             mBuf[n] = 0;
-//             mSampCount[n] = 0;
-//         }
-    }
-    texBuffer& operator<< (T _Val)
-    {
-        if(!(mOffsetN < mTotal)) rewind();
-//         if(mOffsetN < mTotal)
-//         {
-            *(mOffset++) = _Val;
-            mSampCount[mOffsetN]++;
-            mOffsetN++;
-//         }
-        return *this;
-    }
-    inline T fetch()
-    {
-        return *mOffset;
-    }
-    inline T fetch(size_t n)
-    {
-        return mBuf[n];
-    }
-//     inline void set(size_t x, size_t y, _ColorChannnel _color)
-//     {
-//         mBuf[]
-//     }
-    void acc(size_t spp, T _Val)
-    {
-        if(mOffsetN < mTotal)
-        {
-            size_t accSamps = mSampCount[mOffsetN];
-            *(mOffset++) =    
-                (_Val * spp + mBuf[mOffsetN] * accSamps) / (accSamps + spp);
-            mSampCount[mOffsetN] += spp;
-            mOffsetN++;
-        }
-    }
-    void acc(size_t spp, T _Val, size_t _OffsetN)
-    {
-        if(_OffsetN < mTotal)
-        {
-            size_t accSamps = mSampCount[_OffsetN];
-            mBuf[_OffsetN] =    
-                (_Val * spp + mBuf[_OffsetN] * accSamps) / (accSamps + spp);
-            mSampCount[_OffsetN] += spp;
-        }
-    }
-    inline T operator[] (size_t n){
-        return mBuf[n];
-    }
-};
-
-enum _ColorMode{_RGB,_GRAY};
-
-class texDisplay
-{
-public:
-    size_t mWidth, mHeight;
-    size_t mTotal;
-    enum _ColorMode mColor;
-    bool _update;
-    texBuffer<float> texBuf;
-    texBuffer<double> texBuf2;
-
-    float yVecLMB;
-    float xVecLMB;
-    float yVecMMB;
-    float xVecMMB;
-    float yVecRMB;
-    float xVecRMB;
-
-    texDisplay():bGLUT(false),externKey(0),externRender(0){}
-    ~texDisplay();
-    void initializeGL(void);
-    void draw_func();
-    void init( size_t _width, size_t _height, _ColorMode _kind, int argc, char **argv );
-    void init( size_t _width, size_t _height, _ColorMode _kind );
-    template <typename T> void fillTexture(T *buf);
-    bool redisplay();
-    void update();
-    void update(size_t _width, size_t _height, float *d);
-    void update(size_t _width, size_t _height, double *d);
-    void loop();
-    void reset();
-    void rewind();
-    void toSingle();
-    void toDouble();
-    void toSingle_with_correction(double gamma);
-    void toDouble_with_correction(float gamma);
-//     void printScreen();
-    void printScreen(const char *filename);
-//     bool bKeyboard;
-    bool bGLUT;
-    typedef void (*tKeyboardCB)(unsigned char key);
-    typedef void (*tRenderCB)(void);
-    void regKeyboard(tKeyboardCB externKey_);
-    void regRender(tRenderCB externRender_);
-    void resize(int w, int h);
-    tKeyboardCB externKey;
-    tRenderCB externRender;
-};
-
-extern texDisplay tD;
-
-struct CColor{
-    double h, wl, wr, c;
-    CColor(double h_, double wl_, double wr_, double c_)
-        :h(h_), wl(wl_), wr(wr_), c(c_){}
-    inline double clamp(double x) { return x<0 ? 0 : x>1 ? 1 : x; }
-    double operator() (double x){
-        double w = x<c ? wl : wr;
-        return clamp((w-abs(clamp(x)-c))/w*h);
-    }
-};
-
-extern CColor bwrR;//bwr
-extern CColor bwrG;//bwr
-extern CColor bwrB;//bwr
-extern CColor jetR;//jet
-extern CColor jetG;//jet
-extern CColor jetB;//jet
-// CColor cmap(1,1,1,1,1);//grayscale
-// CColor cmap(1,1,0,0,0);//grayscale
-
-#endif // texDisplay_h__
-
-texDisplay tD;
-texDisplay::~texDisplay()
-{
-}
-
-static int mouse_down[3];
-static int x_anchor, y_anchor;
-
-
-void motion(int x, int y)
-{
-    if(mouse_down[0])
-    {
-        tD.xVecLMB = (x - x_anchor);
-        tD.yVecLMB = (y - y_anchor);
-    }
-    if(mouse_down[1])
-    {
-        tD.xVecMMB = (x - x_anchor);
-        tD.yVecMMB = (y - y_anchor);
-    }
-    if(mouse_down[2])
-    {
-        tD.xVecRMB = (x - x_anchor);
-        tD.yVecRMB = (y - y_anchor);
-    }
-
-    x_anchor = x;
-    y_anchor = y;
-}
-
-void texDisplay::regKeyboard(tKeyboardCB externKey_)
-{
-    externKey = externKey_;
-}
-
-void texDisplay::regRender(tRenderCB externRender_)
-{
-    externRender = externRender_;
-}
-
-void texDisplay::init( size_t _width, size_t _height, _ColorMode _kind )
-{
-    bGLUT = false;
-    mColor = _kind;
-    mWidth = _width;
-    mHeight = _height;
-    mTotal = mWidth * mHeight * 3;
-    _update = true;
-    externKey = 0;
-
-    texBuf.init(mTotal);
-    texBuf2.init(mTotal);
-    //     fillTexture(texBuf.mBuf);
-    reset();
-}
-
-bool texDisplay::redisplay()
-{
-    if(_update){
-        //         fillTexture(texBuf.mBuf);
-        //         fillTexture(texBuf2.mBuf);
-        _update = false;
-        //         glutPostRedisplay();
-        return true;
-    }
-    return false;
-}
-void texDisplay::update()
-{
-    if(!bGLUT) return;
-    _update = true;
-}
-
-
-
-template <typename T>
-void texDisplay::fillTexture(T *buf)
-{
-    for(size_t n=0; n<mTotal; n++)
-    {
-        buf[n] = rand()/(T)RAND_MAX;
-    }
-}
-
-void texDisplay::reset()
-{
-    texBuf.reset();
-    texBuf2.reset();
-    //     fillTexture(texBuf.mBuf);
-    //     fillTexture(texBuf2.mBuf);
-}
-
-void texDisplay::rewind()
-{
-    texBuf.rewind();
-    texBuf2.rewind();
-}
-
-void texDisplay::toSingle()
-{
-    for(size_t n=0; n<mTotal; n++)
-    {
-        texBuf.mBuf[n] = (float)texBuf2.mBuf[n];
-    }
-}
-
-void texDisplay::toDouble()
-{
-    for(size_t n=0; n<mTotal; n++)
-    {
-        texBuf2.mBuf[n] = (double)texBuf.mBuf[n];
-    }
-}
-
-template <typename T>
-static inline T clamp(T x)
-{
-    return x<0 ? 0 : x>1 ? 1 : x;
-}
-
-void texDisplay::toSingle_with_correction(double gamma)
-{
-    for(size_t n=0; n<mTotal; n++)
-    {
-        texBuf.mBuf[n] = (float)pow(clamp(texBuf2.mBuf[n]),1.0/gamma);
-    }
-}
-
-void texDisplay::toDouble_with_correction(float gamma)
-{
-    for(size_t n=0; n<mTotal; n++)
-    {
-        texBuf2.mBuf[n] = (double)powf(clamp(texBuf.mBuf[n]),1.0f/gamma);
-    }
-}
-
-// void texDisplay::printScreen()
-// {
-//     // Save result to a PPM image (keep these flags if you compile under Windows)       NOTE::especially std:ios::binary which is equivalent to "wb" in fprintf()
-//     std::ofstream ofs("snapshot.ppm", std::ios::out | std::ios::binary);
-//     ofs << "P6\n" << mWidth << " " << mHeight << "\n255\n";
-//     for (unsigned i = 0; i < mWidth * mHeight * 3; ++i) {
-//         ofs <<  (unsigned char)(min(1.0f, texBuf.mBuf[i]) * 255);
-//     }
-//     ofs.close();
-// }
-
-void texDisplay::printScreen(const char *filename)
-{
-    // Save result to a PPM image (keep these flags if you compile under Windows)       NOTE::especially std:ios::binary which is equivalent to "wb" in fprintf()
-    std::ofstream ofs(filename, std::ios::out | std::ios::binary);
-    ofs << "P6\n" << mWidth << " " << mHeight << "\n255\n";
-    for (unsigned i = 0; i < mWidth * mHeight * 3; ++i) {
-        ofs <<  (unsigned char)(min(1.0f, texBuf.mBuf[i]) * 255);
-    }
-    ofs.close();
-}
-
-
-
 struct param{
     param();
-
-    float g_brightness     ;
-    float g_density        ;
-    float g_transfer_offset;
-    float g_transfer_scale ;
-    float g_sigma          ;
-
-
-    //for shading
-    float kd, ks, ka;
-    float shininess;
-    float STEP;
 
     float dist;
     float fov;
@@ -367,169 +24,45 @@ struct param{
 
     int iw, ih;
 
-    float bg[3];
-
-    bool pregen_grad;
-    bool use_sobol;
-
-    float h;
-    float gradient_normalization_factor;
-
-    float threshold;
-
     /************************************************************************/
     /*                                                                      */
     /************************************************************************/
-    float g_sigma_t;//the scaling factor
-    float g_density_scale;
+    float g_global_scale;//the scaling factor for units
     int spp;
     float albedo;
     int trace_depth;
     float g_light_scale;
     char *envmap;
     float env_rotate;
-    int max_render;
-    float sigma_t_channel[3];
-    float albedo_channel[3];
 
-    float sigma_s_channel[3];
     int env_light_count;
 
     float camera_origin[3];
     float camera_direction[3];
-    float c_alpha;
-    float c_beta;
     float HG_mean_cosine;
     int show_bg;
 
     char *load_fn;
 
     float density_max;
+
+    float radius;
+    float c[4];
+    int maxIter;
 };
 extern param _p;
 
-#if 0
 param::param()
 {
-    STEP = 0.0005;
-    g_brightness          =7; //10.0f; //10.0f; //1.00f;
-    g_density             = 2 * STEP;//premultiplied by raymarch integration stepsize
-    g_transfer_offset     = 0.05;//0.06;//0.07;//0.06f; //0.05f;//0.06f;
-    g_transfer_scale      =1.1;//3.00f;
-    g_sigma = 0;
-
-    kd = 5;
-    ks = 15;
-    ka = 0.2;
-    shininess = 50;
-
-    dist = 1;
-    global_time = 0.5;1.4; 
-
-    iw = 1000;
-    ih = 1000;
-}
-#else
-param::param()
-{
-    STEP = 0.001;//   0.0005;  //
-    g_density             = 50 * STEP;//premultiplied by raymarch integration stepsize
-    g_transfer_offset     = 0; //0.05;//0.06;//0.07;//0.06f; //0.05f;//0.06f;
-    g_transfer_scale      =1.3;//2;//1; //3.00f;
-    g_sigma = 0;
-//     g_brightness          =   g_density / STEP *0.7; //0.6; //0.3; //only control medium emission
-    g_brightness          =   50 *4; //0.6; //0.3; //only control medium emission
-
-    kd = 5;
-    ks = 15;
-    ka = 0.4;
-
-    dist = 2; // 1;// 
-    fov = 45;
-    global_time = 0.5; 0.2;  1.4; 
-
-    iw = 600;
-    ih = 600;
-//     iw = 1600;
-//     ih = 1600;
-
-    bg[0] = 0;
-    bg[1] = 0;
-    bg[2] = 0;
-
-    shininess = 50;
-
-    pregen_grad = 0;
-    use_sobol = 0;
-
-    //////////////////////////////////////////////////////////////////////////
-    h=1.0/200; // 1.0/512; //    //0.1;
-    gradient_normalization_factor= 1; //5; //0.5; //to normalize the gradient globally
-
-    threshold = 2000;
-
-    /************************************************************************/
-    /*                                                                      */
-    /************************************************************************/
-//     g_sigma_t = 200;          //++++++++++++++++++++
-//     g_density_scale = 5;      //++++++++++++++++++++
-//     g_sigma_t = 40;
-//     g_density_scale = 25;
-    g_sigma_t = 100;
-    g_density_scale = 4;
-
-//     spp = 2000;
-//     spp = 20;
-    spp = 1000;
-//     spp = 100;
-//     spp = 3000;
-    albedo = 0.8; //0.97; //0.9;
-    trace_depth = 11; //2; // ##for buggy version, the overflowed path (which is NOT through) is excessively illuminated
-                        //to correct it, must evaluate final exiting transmittance for that path(either raymarching or woodcock statistics)
+    dist = 2;
 
     global_time = 0;
 
-    g_light_scale = 2; //1;
-
-//     envmap = "envmap2.bin";//++++++++++++++++
-//     envmap = "envmap.bin";
-//     envmap = "sun.bin"; g_light_scale = 20; //front 10; //3;//where importance sampled direct lighting matters+++++++++++++++++
-//     envmap = "sun2.bin"; g_light_scale = 20; //back 3;//where importance sampled direct lighting matters
-//     envmap = "skydome_00040.bin"; g_light_scale = 2; 
-    envmap = "null"; g_light_scale = 10;//cloud
-    env_light_count = 40000; //400; //100; //2000; //fireflies seem to be caused by bad sampled light(s), so increasing the candidate count
-                //kind of solves the problem. But it also could be the problem of sampling some lights excessively
+//     envmap = "sun2.bin"; g_light_scale = 20; 
+    envmap = "null"; g_light_scale = 1;
+    env_light_count = 40000;
     env_rotate = 0;
-
-    max_render = 1; //60;
     
-    //////////////////////////////////////////////////////////////////////////
-    //multi-channel tests
-    //considering the implementation, sigma_t is actually (sigma_s+sigma_a)*scale_factor, but conceptually sigma_a can be 1 for convenience, leaving scale_factor as desired
-    //                     clr                       clr                   iso        fwrd       fwrd       ref                 cool
-    sigma_t_channel[0] =   0.70f                ;  //2.00;    //2.00;    //4.00;    //4.47;    //.7 ;    //.7 ;    //.9 ;    //.9 ;    //.9;    //1 ;      //1  ;
-    sigma_t_channel[1] =   1.22f                ;  //2.00;    //2.00;    //4.00;    //4.47;    //.7 ;    //.7 ;    //.8 ;    //.8 ;    //.8;    //1 ;      //1  ;
-    sigma_t_channel[2] =   1.90f                ;  //2.00;    //2.00;    //4.00;    //4.47;    //.7 ;    //.7 ;    //.7 ;    //.7 ;    //.7;    //1 ;      //1  ;
-    albedo_channel[0]  =   0.70f/(0.70f+0.0014f);  //.92 ;    //.999;    //.999;    //.992;    //.95;    //.95;    //.95;    //.95;    //.8;    //.7;      //0.8;
-    albedo_channel[1]  =   1.22f/(1.22f+0.0025f);  //.99 ;    //.999;    //.999;    //.992;    //.95;    //.95;    //.97;    //.95;    //.8;    //.8;      //0.8;
-    albedo_channel[2]  =   1.90f/(1.90f+0.0142f);  //.999;    //.999;    //.999;    //.992;    //.95;    //.95;    //.98;    //.95;    //.8;    //.9;      //0.8;
-
-    trace_depth =  80; //20; //30;  // {80/30 not much differennt for albedo=.95}
-    spp = 30; //1000; //3000;
-
-    /////
-//     g_density_scale = 0.1;//debug for sphere
-    trace_depth = 20*4; //debug for directlight
-    spp = 200;//30;// 10; // 1000; //1000; // 1;//         //debug for directlight
-//     iw = 200;     //debug for directlight
-//     ih = 200;     //debug for directlight
-
-
-    sigma_s_channel[0] = sigma_t_channel[0] * albedo_channel[0];
-    sigma_s_channel[1] = sigma_t_channel[1] * albedo_channel[1];
-    sigma_s_channel[2] = sigma_t_channel[2] * albedo_channel[2];
-    printf("param::sigma_s<%f,%f,%f>\n",sigma_s_channel[0],sigma_s_channel[1],sigma_s_channel[2]);
-
     show_bg = 0;
 
     camera_origin[0] = 0;
@@ -540,85 +73,46 @@ param::param()
     camera_direction[2] = -dist ;
 
     //////////////////////////////////////////////////////////////////////////
-//     camera_origin[0] = 0      -0.5 * 0.18; //0.14 ;
-//     camera_origin[1] = -0.2   -0.4 * 0.18; //0.14 ;
-//     camera_origin[2] = 0.5    -2   * 0.18; //0.14 ;
-//     camera_origin[0] = 0      -0.5 * 0.18; //0.14 ;
-//     camera_origin[1] = -0.25   -0.4 * 0.18; //0.14 ;
-//     camera_origin[2] = 0.5    -2   * 0.18; //0.14 ;
-//     camera_direction[0] = -0.5;
-//     camera_direction[1] = -0.4;
-//     camera_direction[2] = -2  ;
-    sigma_t_channel[0] =   1.00f; 
-    sigma_t_channel[1] =   1.00f; 
-    sigma_t_channel[2] =   1.00f; 
-    albedo_channel[0]  =  0.99; // 0.95; //0.9; //0.99;
-    albedo_channel[1]  =  0.99; // 0.95; //0.9; //0.99;
-    albedo_channel[2]  =  0.99; // 0.95; //0.9; //0.99;
-//     c_alpha = -0.2; //-0.7; //-0.4; //-.9; //1;
-//     c_beta = 1; //0;        //_p.albedo_channel[channel] * (_p.c_alpha*density+_p.c_beta)
-    c_alpha =0;//-5;// -0.2;
-    c_beta = 1;//5.95; //1.1;
-    HG_mean_cosine = -0.7; //-0.4; //0.7; //0.96; //this backscattering HG setting worked fine 
-                            //when only used for scattering events while the actual phase function 
-                                        //for direct lighting was spherical
-//     g_sigma_t = 400;
-//     g_density_scale = 1;
-//     g_sigma_t = 100;
-//     g_density_scale = 4;
-//     g_sigma_t = 200;
-//     g_density_scale = 2;
-    g_sigma_t = 200;       //++
-    g_density_scale = 4;   //++
-//     g_sigma_t = 100;         //++++++++++++++++
-//     g_density_scale = 1;     //++++++++++++++++
+    load_fn = "null";
 
-//     load_fn = "300c.bin";
-//     load_fn = "F:/GraphicsWork/render/SSS/Ifu/CLOUDS/300c.bin";//+++++++++++
-//     load_fn = "F:/GraphicsWork/render/SSS/Ifu/CLOUDS/300d.bin";
-//     load_fn = "F:/GraphicsWork/render/SSS/Ifu/CLOUDS/100c.bin";
-//     load_fn = "vol_1.bin";
-//     load_fn = "pyro_test_256.bin";
-//     load_fn = "F:/GraphicsWork/render/SSS/Ifu/CLOUDS/100e.bin";
-//     load_fn = "F:/GraphicsWork/render/SSS/Ifu/CLOUDS/300e.bin";
-//     load_fn = "C:/Users/asus/Desktop/__TEMP__/ModernOPENGL/raycast/build/pyro400.bin";
-    load_fn = "sample_cloud_beta2.bin";
-
-    //nonspectral
-    albedo = 0.99;
-    spp = 600;//30; // three times(200*3) as for spectral version to achieve similar convergence
-    HG_mean_cosine = 0.7; //0.4; //0.9; //0.95; //-0.7; // 0; //
-//     albedo = 0.9999; trace_depth = 300;
-//     g_sigma_t = 400;
-//     g_density_scale = 8; //16;
-
-
-    //
-//     global_time = 4;
-//     dist=1;
-//     global_time = 4.5;   //+++++++++++++++++++++
-//     fov=20;//24;//zoom in     //+++++++++++++++++++++
+    global_time = 0.5;
     camera_origin[0] = dist*sinf(global_time);
     camera_origin[1] = 0.2;
     camera_origin[2] = dist*cosf(global_time);
     camera_direction[0] = -camera_origin[0];
     camera_direction[1] = -camera_origin[1];
-//     camera_direction[1] = 0.2-camera_origin[1];//++++++++++++++++++++
 //     camera_direction[1] = -0.2-camera_origin[1];
     camera_direction[2] = -camera_origin[2];
-    iw = 300;//*2;
-    ih = 300;//*2;
-    trace_depth=100; //300;
-    spp=1000; //200;//30/3;
-//     g_density_scale = 200;//equivalent of binarization at isolevel=0.02 with the previous setting
-    env_rotate=  270; //180; //90;//1330; //300;//240;//210;//150;//120; //60;//30; //80; //
-//     show_bg=1;
-//     g_density_scale= 50;
-    g_sigma_t = 50;       //++
-    g_density_scale = 1;   //++
+    iw = 300;
+    ih = 300;
+    spp=300;
+    env_rotate=  180;
+    g_global_scale = 50; //100; //400;
+
+#define SET_FLOAT4(x,a,b,c,d) x[0]=a;x[1]=b;x[2]=c;x[3]=d;
+    radius = 3;
+    //     SET_FLOAT4(c, -1, 0.2, 0, 0)
+    //     SET_FLOAT4(c, -0.291,-0.399,0.339,0.437)
+    //     SET_FLOAT4(c, -0.2,0.4,-0.4,-0.4)
+    //     SET_FLOAT4(c, -0.213,-0.0410,-0.563,-0.560)
+    //     SET_FLOAT4(c, -0.2,0.6,0.2,0.2)
+    //     SET_FLOAT4(c, -0.162,0.163,0.560,-0.599)
+    SET_FLOAT4(c, -0.2,0.8,0,0)
+        //     SET_FLOAT4(c, -0.445,0.339,-0.0889,-0.562)
+        //     SET_FLOAT4(c, 0.185,0.478,0.125,-0.392)
+        //     SET_FLOAT4(c, -0.450,-0.447,0.181,0.306)
+        //     SET_FLOAT4(c, -0.218,-0.113,-0.181,-0.496)
+        //     SET_FLOAT4(c, -0.137,-0.630,-0.475,-0.046)
+        //     SET_FLOAT4(c, -0.125,-0.256,0.847,0.0895)
+        //     maxIter = 20;
+    maxIter = 30;
+
+    fov = 30;
+    albedo = 0.9;
+    HG_mean_cosine = 0.7;//higher improves performance
+    trace_depth=100;
 
 }
-#endif
 
 param _p;
 
@@ -629,10 +123,6 @@ param _p;
 #define hvec std::vector
 #define dvec std::vector
 #define RAW(x) (&x[0])
-
-#define FI //__forceinline__
-#define Dev
-#define HaD
 
 #define M_PI 3.14159265358979323846264338328 
 #define M_PI_2 1.57079632679489661923
@@ -726,7 +216,7 @@ public:
     void toDevice();
     void init_pdf();
 
-    void sample_envmap();
+    void presample_envmap();
     hvec<dir_light> h_light;
     dvec<dir_light> d_light;
 };
@@ -758,10 +248,10 @@ int ppmLoader::openImageFile_hdr(
         float *p = p_h_rawPixels;
         for (unsigned j = 0; j < height; ++j) {
             for (unsigned i = 0; i < width; ++i) {
-                float hl = expf(-100*(sq((i-width*0.5)/width)+sq((j-height*0.5)/height)))*30+0.3;
-                p[0] =  hl;
-                p[1] =  hl;
-                p[2] =  hl;
+                float hl = expf(-100*(sq((i-width*0.0)/width)+sq((j-height*0.5)/height)))*30+0.3;
+                p[0] =  hl*.98;
+                p[1] =  hl*.95;
+                p[2] =  hl*.92;
                 p += 3;
             }
         }
@@ -787,7 +277,7 @@ int ppmLoader::openImageFile_hdr(
     }
 
     init_pdf();
-    sample_envmap();
+    presample_envmap();
 
     toDevice();
     return 0;
@@ -845,9 +335,8 @@ rgb_t ppmLoader::getRGB( float x, float y, kind_ k )
         p_h_rawPixels[offset+1], p_h_rawPixels[offset+2]);
 }
 
-
 /************************************************************************/
-/* Inversion method for importance sampling                               */
+/* Inversion method for importance sampling                             */
 /************************************************************************/
 static void precompute1D(float *f, float *pf, float *Pf, int nf){
     float I = 0.0f;
@@ -945,7 +434,7 @@ void ppmLoader::init_pdf(){
     printf("int=%f\n",integral);
 }
 
-void ppmLoader::sample_envmap()
+void ppmLoader::presample_envmap()
 {
     int N = int(sqrtf(_p.env_light_count));
     int n_light = N*N;
@@ -972,10 +461,9 @@ void ppmLoader::sample_envmap()
 
         float theta = (int(test_u)+0.5)/float(height) * M_PI;
         float phi = (int(test_v)+0.5)/float(width) * (2.0f * M_PI);//azimuthal
-        vec sample_dir = vec(sinf(theta)*sinf(phi),cosf(theta),sinf(theta)*-cosf(phi));//in world coordinates, care with calibration with envmap sampling routine, trick is to offset and/or invert phi
+        vec sample_dir = vec(sinf(theta)*sinf(phi),cosf(theta),sinf(theta)*-cosf(phi));
 
-        float sample_pdf = test_pdf * ((float(width)*float(height))/(2.0f*M_PI*M_PI*sinf(theta)));//for normalization over sphere
-                                                                          //closer to the pole -> larger pdf
+        float sample_pdf = test_pdf * ((float(width)*float(height))/(2.0f*M_PI*M_PI*sinf(theta)));//warpping
         dir_light dl;
         dl.direction = sample_dir;
         dl.radiance = sample_radiance;
@@ -988,51 +476,6 @@ void ppmLoader::sample_envmap()
 
     printf(".#light=..%d...\n",d_light.size());
 }
-
-void sample1D_CUDA(float *pf, float *Pf, float unif, int nf,
-    float &x, float &p)
-{
-    int i=0;
-    for(; i<nf; i++){
-        if(Pf[i]<=unif && unif<Pf[i+1] || i==nf-1)//avoid overflow by additional check
-            break;
-    }
-    float t = Pf[i+1] > Pf[i] ? 
-        (Pf[i+1] - unif) / (Pf[i+1] - Pf[i])
-        : 0;
-
-    x = (1-t) * i + t * (i+1);
-    p = pf[i];
-}
-
-void sample2D_CUDA(float *pu, float *Pu, float *pv, float *Pv,
-    float unif1, float unif2, int nu, int nv, 
-    float &u, float &v, float &pdf)
-{
-    float pdfu, pdfv;
-    sample1D_CUDA(pu, Pu, unif1, nu, u, pdfu);
-    sample1D_CUDA(pv+int(u)*nv, Pv+int(u)*(nv+1), unif2, nv, v, pdfv);
-    pdf = pdfu * pdfv;
-}
-
-int sample_envmap_inverse_method(vec& sample_dir, float& sample_pdf, 
-    float *pu, float *Pu, float *pv, float *Pv, float e1, float e2,
-    int width, int height)
-{
-    float test_u, test_v, test_pdf;
-    sample2D_CUDA(pu, Pu, pv, Pv, e1, e2, height, width, 
-        test_u, test_v, test_pdf);
-
-    float theta = int(test_u)/float(height) * M_PI;
-    float phi = int(test_v)/float(width) * (2.0f * M_PI);//azimuthal
-
-    sample_pdf = test_pdf * ((float(width)*float(height))/(2.0f*M_PI*M_PI*sinf(theta)));
-    sample_dir = vec(sinf(theta)*sinf(phi),cosf(theta),sinf(theta)*-cosf(phi));
-
-    return int(test_u)*width+int(test_v);
-}
-
-
 
 ppmLoader ppm;
 #endif // ppmLoader_h__
@@ -1127,6 +570,58 @@ int index_zxy(int x, int y, int z, int N, int NN) { return z+x*N+y*NN; }
 int index_zyx(int x, int y, int z, int N, int NN) { return z+y*N+x*NN; }
 #define index_convention index_xyz
 
+
+
+void quatSq(float q[4])
+{
+    float r0;
+
+    vec q_yzw(q[1], q[2], q[3]);
+
+    r0 = q[0]*q[0] - dot(q_yzw, q_yzw);
+    vec r_yzw( q_yzw*(q[0]*2) );
+
+    q[0] = r0;
+    q[1] = r_yzw.x;
+    q[2] = r_yzw.y;
+    q[3] = r_yzw.z;
+}
+
+void add(float a[4], float b[4]){
+    a[0]+=b[0];
+    a[1]+=b[1];
+    a[2]+=b[2];
+    a[3]+=b[3];
+}
+float length2(float a[4]){
+    return a[0]*a[0] + 
+           a[1]*a[1] + 
+           a[2]*a[2] + 
+           a[3]*a[3];
+}
+
+float eval_fractal(const vec& pos, float radius, float c[4], int maxIter){
+
+    float q[4] = { pos.x*radius, pos.y*radius, pos.z*radius, 0 };
+
+    int iter = 0;
+    do 
+    {
+        quatSq(q);
+        add(q,c);
+    } while (length2(q)<10.0f && iter++ <maxIter);
+
+    //     return iter * (iter>5);
+    //     return iter / float(maxIter);
+    //     return log((float)iter+1) / log((float)maxIter);
+    return (iter>maxIter*0.9);
+}
+
+int clampi(int x, int a, int b)
+{
+    return x<a ? a : x>b ? b : x;
+}
+
 template<typename T>
 struct _tex3d_proxy{//isocube
     int N, total, NN;
@@ -1137,21 +632,31 @@ struct _tex3d_proxy{//isocube
     T& operator[] (int n) { return data[n]; }
     T& operator() (int i, int j, int k) { return data[index(i,j,k)]; }
     T fetch_gpu(const vec& pos) const {
+#if ANALYTIC
+        return eval_fractal(pos, _p.radius, _p.c, _p.maxIter);
+#else
         if(outside(pos))return 0;
         vec p = remap_to_one(pos);
         float x_ = p.x;
         float y_ = p.y;
         float z_ = p.z;
         //trilinear
-        x_ *= N-2;
-        y_ *= N-2;
-        z_ *= N-2;
+        x_ = x_ * N - 0.5;
+        y_ = y_ * N - 0.5;
+        z_ = z_ * N - 0.5;
         int i_0 = (int)x_;
         int j_0 = (int)y_;
         int k_0 = (int)z_;
         int i_1 = i_0 + 1;
         int j_1 = j_0 + 1;
         int k_1 = k_0 + 1;
+        //fixed
+        i_0 = clampi(i_0, 0, N-1);
+        j_0 = clampi(j_0, 0, N-1);
+        k_0 = clampi(k_0, 0, N-1);
+        i_1 = clampi(i_1, 0, N-1);
+        j_1 = clampi(j_1, 0, N-1);
+        k_1 = clampi(k_1, 0, N-1);
         float u1 = x_ - i_0;
         float v1 = y_ - j_0;
         float w1 = z_ - k_0;
@@ -1167,6 +672,7 @@ struct _tex3d_proxy{//isocube
             +       v1*(w0*(data[index(i_1,j_1,k_0)])
             +           w1*(data[index(i_1,j_1,k_1)])))
             ;
+#endif
     }
     //////////////////////////////////////////////////////////////////////////
     bool outside(const vec& pos) const {
@@ -1199,34 +705,34 @@ struct _tex3d{//isocube
     };
     struct norm_op{
         float _min, _max, inv;
-        FI HaD norm_op(float a, float b):_min(a),_max(b){
+        norm_op(float a, float b):_min(a),_max(b){
             inv = 1.0/f_max(eps, _max-_min);
         }
-        FI HaD float operator()(float x){
+        float operator()(float x){
             return (x-_min)*inv;
         }
-        FI HaD vec operator()(vec x){
+        vec operator()(vec x){
             return (x)*inv;
         }
     };
     struct threshold_op{
         float a;
         threshold_op(float a_):a(a_){}
-        FI HaD float operator()(const float x) const {
+        float operator()(const float x) const {
             return x < a ? x : a;
         }
     };
     struct binarize_op{
         float a;
         binarize_op(float a_):a(a_){}
-        FI HaD float operator()(const float x) const {
+        float operator()(const float x) const {
             return x < a ? 0 : 1;
         }
     };
     struct binarize_op_smooth{
         float a,b,inv;
         binarize_op_smooth(float a_, float b_):a(a_),b(b_),inv(1.0/(b-a)){}
-        FI HaD float operator()(const float x) const {
+        float operator()(const float x) const {
             return x < a ? 0 : x > b ? 1 : (x-a)*inv;
         }
     };
@@ -1274,12 +780,12 @@ struct _tex3d{//isocube
     void binarize(float level){
         float _min = *std::min_element(data.begin(), data.end(),abs_compare());
         float _max = *std::max_element(data.begin(), data.end(),abs_compare());
-        thrust::transform(data.begin(), data.end(), data.begin(), binarize_op(level*(_max-_min)+_min));
+        std::transform(data.begin(), data.end(), data.begin(), binarize_op(level*(_max-_min)+_min));
     }
     void binarize(float level1, float level2){
         float _min = *std::min_element(data.begin(), data.end(),abs_compare());
         float _max = *std::max_element(data.begin(), data.end(),abs_compare());
-        thrust::transform(data.begin(), data.end(), data.begin(),
+        std::transform(data.begin(), data.end(), data.begin(),
             binarize_op_smooth(level1*(_max-_min)+_min,level2*(_max-_min)+_min));
     }
     //meta(r) = (R^2-r^2)^2/R^4
@@ -1325,6 +831,10 @@ struct _tex3d{//isocube
                 for(int k=0; k<N; k++){
                     data[index(i,j,k)] = 
                         (int(ceil(5.0*(i+1)/N)+ceil(5.0*(j+1)/N)+ceil(5.0*(k+1)/N))&1)*1;
+//                         (int(ceil(5.0*(i+1)/N)+ceil(5.0*(j+1)/N)+ceil(5.0*(k+1)/N))&1)*0.5+0.5;
+//                         (int(ceil(5.0*(i+1)/N)+ceil(5.0*(j+1)/N)+ceil(5.0*(k+1)/N))&1)*(float(k)/N);
+//                         (int(ceil(5.0*(i+1)/N)+ceil(5.0*(j+1)/N)+ceil(5.0*(k+1)/N))&1)*(1-float(k)/N);
+//                         (int(ceil(5.0*(i+1)/N)+ceil(5.0*(j+1)/N)+ceil(5.0*(k+1)/N))&1)*(float(i)/N);
                 }
             }
         }
@@ -1383,14 +893,14 @@ struct _tex3d{//isocube
         ;
     }
     //////////////////////////////////////////////////////////////////////////
-    FI HaD bool outside(const vec& pos) const {
+    bool outside(const vec& pos) const {
         return pos.x<min.x || pos.y<min.y || pos.z<min.z
             || pos.x>max.x || pos.y>max.y || pos.z>max.z;
     }
-    FI HaD vec remap_to_one(const vec& pos) const {//normalize
+    vec remap_to_one(const vec& pos) const {//normalize
         return (pos-min)*(1.0f/l);
     }
-    FI HaD int index(int x, int y, int z) const {
+    int index(int x, int y, int z) const {
         return index_convention(x, y, z, N, NN);
     }
 
@@ -1427,7 +937,7 @@ struct KernelArray
         _size = (int)_a.size();
     }
 
-    FI HaD T& operator[](int n) { return _array[n]; }
+    T& operator[](int n) { return _array[n]; }
 };
 
 bool intersect_vol(const ray& r, const vec& aabb_min, const vec& aabb_max, float& t_near, float& t_far){
@@ -1486,7 +996,7 @@ vec envmap_sample_dir(vec r, const float *d_pixels,
 
 
 float get_transmittance_woodcock(const vec& a, const vec& b, 
-    const tex3d_proxy& pdensity_volume, const param& _p, int channel, 
+    const tex3d_proxy& pdensity_volume, const param& _p,  
         float inv_sigma_max, float inv_density_max)
 {
     ray light_ray(a,normalize(b-a));
@@ -1517,9 +1027,7 @@ float get_transmittance_woodcock(const vec& a, const vec& b,
             }
             vec pos = light_ray.advance(dist);
             density = pdensity_volume.fetch_gpu(pos);
-            float e2 = RANDU;
-            float fraction = density * inv_density_max;//assuming that sigma_t = density * g_sigma_t(scale factor) * sigma_t_channel[channel], and that the latter two are constants
-            if(e2 < fraction)
+            if(RANDU < density * inv_density_max)
             {
                 break;
             }
@@ -1528,7 +1036,7 @@ float get_transmittance_woodcock(const vec& a, const vec& b,
     return count/nsamp;
 }
 
-void raytrace_volpath_multiscatter_channel_directlight__importance_nonspectral(
+void raytrace_volpath_multiscatter(
     KernelArray<ray> cam_ray_array,
     KernelArray<vec> pixels,
     tex3d_proxy pdensity_volume, 
@@ -1540,14 +1048,13 @@ void raytrace_volpath_multiscatter_channel_directlight__importance_nonspectral(
     float density_max)
 {
     float albedo = _p.albedo; // sigma_s / sigma_t
-    //////////////////////////////////////////////////////////////////////////
 
     ray cr(cam_ray_array[idx]);
     vec radiance(0,0,0);
     vec throughput(1,1,1);
 
     /// for woodcock tracking
-    float sigma_max = density_max * _p.g_sigma_t;
+    float sigma_max = density_max * _p.g_global_scale;
     float inv_sigma_max = 1.0f / sigma_max;
     float inv_density_max = 1.0f / density_max;
 
@@ -1558,9 +1065,7 @@ void raytrace_volpath_multiscatter_channel_directlight__importance_nonspectral(
         bool shade_vol = intersect_vol(cr, pdensity_volume.min, pdensity_volume.max, t_near, t_far);
 
         if(!shade_vol && depth==0 && _p.show_bg){
-            radiance = radiance +
-                mult(envmap_sample_dir(cr.d, d_pixels, texWidth, texHeight),throughput)
-                * _p.g_light_scale;
+            radiance = radiance + mult(envmap_sample_dir(cr.d, d_pixels, texWidth, texHeight),throughput);
             break;
         }
 
@@ -1583,9 +1088,7 @@ void raytrace_volpath_multiscatter_channel_directlight__importance_nonspectral(
                 }
                 pos = cr.advance(dist);
                 density = pdensity_volume.fetch_gpu(pos);
-                float e2 = RANDU;
-                float fraction = density * inv_density_max;//assuming that sigma_t = density * g_sigma_t(scale factor) * sigma_t_channel[channel], and that the latter two are constants
-                if(e2 < fraction)
+                if(RANDU < density * inv_density_max)//sigma_t = density * g_sigma_t(scale factor)
                 {
                     break;
                 }
@@ -1595,17 +1098,21 @@ void raytrace_volpath_multiscatter_channel_directlight__importance_nonspectral(
             {
                 throughput = throughput * albedo; //all subsequent light evaluations are scattered
  
-                dir_light envmap_dl = d_light[int(RANDU*n_light)];
-                float transmittance = 
-                    get_transmittance_woodcock(pos, pos+envmap_dl.direction*1000.0f, pdensity_volume, _p, 0,
-                     inv_sigma_max, inv_density_max);
-                vec attenuated_radiance = 
-                    envmap_dl.radiance
-                    * (_p.g_light_scale * transmittance);
-                radiance = radiance +
-                    mult(attenuated_radiance,throughput) * (
-                    ((HG_phase_function(_p.HG_mean_cosine, dot(cr.d, envmap_dl.direction))) / envmap_dl.pdf)//fixed to use HG always
-                    * (my_saturate(_p.c_alpha*density+_p.c_beta)));
+                // the sun light may be strongly directional, but is always scattered by atmosphere,
+                // hence modeled by IBL (depends on Mie phase function for directionality)
+                {
+                    dir_light envmap_dl = d_light[int(RANDU*n_light)];
+                    float transmittance = 
+                        get_transmittance_woodcock(pos, pos+envmap_dl.direction*1000.0f, pdensity_volume, _p, 
+                        inv_sigma_max, inv_density_max);
+                    vec attenuated_radiance = 
+                        envmap_dl.radiance
+                        * (transmittance);
+                    radiance = radiance +
+                        mult(attenuated_radiance,throughput) * 
+                        (HG_phase_function(_p.HG_mean_cosine, dot(cr.d, envmap_dl.direction))
+                        / envmap_dl.pdf);
+                }
 
                 vec dir = sampleHG(_p.HG_mean_cosine,RANDU, RANDU);
                 vec ref_dir(2,3,5);
@@ -1620,9 +1127,7 @@ void raytrace_volpath_multiscatter_channel_directlight__importance_nonspectral(
             {
                 if(depth==0 && _p.show_bg)
                 {
-                    radiance = radiance +
-                        mult(envmap_sample_dir(cr.d, d_pixels, texWidth, texHeight),throughput)
-                        * _p.g_light_scale;
+                    radiance = radiance + mult(envmap_sample_dir(cr.d, d_pixels, texWidth, texHeight),throughput);
                 }
                 
                 break;
@@ -1647,7 +1152,7 @@ struct vec_scale_op{
     }
 };
 
-void render(char *filename) 
+void render() 
 {
     tex3d& vol = *g_vol;
 
@@ -1683,9 +1188,9 @@ void render(char *filename)
     {
         for(int idx=0; idx<_p.iw*_p.ih; idx++)
         {
-            raytrace_volpath_multiscatter_channel_directlight__importance_nonspectral
+            raytrace_volpath_multiscatter
                 (cam_rays, fb, 
-                vol.get_proxy(), vol.get_proxy(), //for simplicity use density for illumination strength, anyway, this routine is only for debugging woodcock tracking
+                vol.get_proxy(), vol.get_proxy(),
                 ppm.p_d_rawPixels, ppm.width, ppm.height,
                 _p.iw, _p.ih, _p, 
                 ppm.pu_device, ppm.Pu_device, ppm.pv_device, ppm.Pv_device,
@@ -1697,42 +1202,32 @@ void render(char *filename)
 
     printf("\rDEBUG::kernel finished\n");
 
-
-    hvec<vec> hfb(fb);
-    for(int j=0; j<_p.ih; j++){
-#pragma omp parallel for
-        for(int i=0; i<_p.iw; i++){
-            int offset = (i+j*_p.iw);
-            vec c = hfb[offset];
-            tD.texBuf.mBuf[offset*3  ] = c.x;
-            tD.texBuf.mBuf[offset*3+1] = c.y;
-            tD.texBuf.mBuf[offset*3+2] = c.z;
-        }
-    }
-
+    float *fb1 = reinterpret_cast<float*>(&fb[0]);
     printf("color range: [%f, %f] \n",
-        *std::min_element(tD.texBuf.mBuf, tD.texBuf.mBuf+_p.iw*_p.ih),
-        *std::max_element(tD.texBuf.mBuf, tD.texBuf.mBuf+_p.iw*_p.ih));
-
-    tD.update();
-
-    tD.printScreen(filename);
-    printf("Rendered to %s\n",filename);
+        *std::min_element(fb1, fb1+_p.iw*_p.ih*3),
+        *std::max_element(fb1, fb1+_p.iw*_p.ih*3));
 
     //not tonemapped
-    save_hdr_image(tD.texBuf.mBuf, _p.iw, _p.ih, "_additional.bin");
+    save_hdr_image(fb1, _p.iw, _p.ih, "_additional.bin");
 }
 
-int main(int argc, char *argv[]){
-    system("mkdir ppm");
+struct scale_op{
+    float a;
+    scale_op(float a_):a(a_){}
+    float operator()(float x){
+        return x*a;
+    }
+};
 
+int main(int argc, char *argv[])
+{
     printf("DEBUG:: begin program\n");
     tex3d vol(DEFAULT_DIM,1,vec(-0.5));
 
     vol.init_simple();
 //     vol.load_binary(_p.load_fn);
-    vol.threshold(_p.threshold);
-    vol.normalize();
+//     vol.normalize();
+//     vol.binarize(0.02);
 
     _p.density_max = vol.max_element();
     printf("maximum density is %f\n",_p.density_max);
@@ -1743,19 +1238,12 @@ int main(int argc, char *argv[]){
 
     printf("init complete\n");
 
-    tD.init(_p.iw,_p.ih,_RGB);
-
-    ppm.openImageFile_hdr(_p.envmap,1,_p.env_rotate);
+    ppm.openImageFile_hdr(_p.envmap,_p.g_light_scale,_p.env_rotate);
 
 
     printf("DEBUG::preparing to render\n");
 
-    for(int n=0; n<_p.max_render; n++)
-    {
-        char fn[256];
-        sprintf(fn,"ppm/test_%05d.ppm",n);
-        render(fn);
-    }
+    render();
 
     return 0;
 }
