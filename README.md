@@ -3,7 +3,7 @@ Volumetric path tracer
 
 This is a global illuminated volume renderer featuring Woodcock tracking & importance sampled path tracing.
 
-The Woodcock tracking technique distinguishes from the raymarching technique in that it does not approach the integral of the volume rendering equation with a biased Riemann sum, but rather applies the Monte Carlo technique for unbiased integration. This allows the global illumination solution of the volume to be unbiased and strong, especially when there's heavy spectral dependence in the medium's scattering properties.
+The Woodcock tracking technique distinguishes from the raymarching technique in that it does not approach the integral of the volume rendering equation with a biased Riemann sum (using Simpson quadrature, trapezoidal rule, etc), but rather applies the Monte Carlo technique for unbiased integration. This allows the global illumination solution of the volume to be unbiased and strong, especially when there's heavy spectral dependence in the medium's scattering properties.
 
 Albeit imaginary, the physical explanation of this approach is to introduce an ideal auxiliary component that has no absorption but perfect forward scattering, thus not altering the direction or energy of the scattered light rays. In such a mixed medium, scattering events are decided probabilistically by the volume fraction of the corresponding component. And an effective scattering event only occurs when the normal component is hit.
 
